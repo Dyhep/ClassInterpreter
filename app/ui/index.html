@@ -91,10 +91,10 @@ main{flex:1;display:flex;min-height:0}
 .note{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6}
 
 /* footer */
-footer{display:flex;align-items:center;gap:12px;padding:7px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted)}
-#status{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+footer{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted)}
+#status{flex:1 1 120px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg-ctl{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-.seg-ctl button{border:none;background:transparent;padding:3px 10px;font-size:13px;color:var(--muted)}
+.seg-ctl button{white-space:nowrap;border:none;background:transparent;padding:3px 10px;font-size:13px;color:var(--muted)}
 .seg-ctl button.on{background:var(--accent-soft);color:var(--accent)}
 .pill{padding:2px 8px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:12px;white-space:nowrap}
 .pill.cloud{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
@@ -196,6 +196,10 @@ footer{display:flex;align-items:center;gap:12px;padding:7px 14px;border-top:1px 
 
 <footer>
   <span id="status">准备就绪</span>
+  <span class="pill" id="costPill" title="本节课 Claude 花费（按官方价格估算）" style="display:none"></span>
+  <div class="seg-ctl" id="tierCtl" title="精准档：逐句、最快最准；省钱档：攒 2–3 句一起翻，约省一半，中文晚 2–3 秒">
+    <button data-t="best">精准档</button><button data-t="saver">省钱档</button>
+  </div>
   <span class="pill" id="modePill">本地模式</span>
   <div class="seg-ctl" id="viewMode">
     <button data-m="both">双语</button><button data-m="zh">中文</button><button data-m="en">英文</button>
@@ -223,6 +227,9 @@ footer{display:flex;align-items:center;gap:12px;padding:7px 14px;border-top:1px 
           <button class="btn" id="testKey">测试</button></div>
         <div class="muted" id="keyMsg"></div>
         <div class="switch"><span>用 Claude 翻译</span><input type="checkbox" id="cloudTr"></div>
+        <div class="muted" style="line-height:1.7;margin:-2px 0 6px">翻译档位（底部栏可随时切换）：<br>
+          <b>精准档</b>：每句话单独翻译，边说边出，约 $0.65/小时。适合难的课。<br>
+          <b>省钱档</b>：攒 2–3 句一起翻译，语气词不翻，约 $0.3/小时，中文晚 2–3 秒。</div>
         <div class="switch"><span>用 Claude 总结</span><input type="checkbox" id="cloudSum"></div>
       </div>
       <div class="sec">
@@ -315,10 +322,11 @@ async function pollLoop(){
     for(const e of r.events){
       lastSeq = e.seq;
       switch(e.kind){
-        case "session": summaryFolder=e.session.folder; break;
+        case "session": summaryFolder=e.session.folder; showCost(null); break;
         case "final": $("#partial").textContent=""; addSeg(e.seg); break;
         case "partial": $("#partial").textContent=e.text; if(e.text){ $("#empty").style.display="none"; scrollEnd(); } break;
         case "translating": setZh(e.id, e.zh, true); break;
+        case "cost": showCost(e); break;
         case "translated": setZh(e.id, e.zh); break;
         case "status": setStatus(e.text); break;
         case "warning": setStatus(e.text); break;
@@ -380,13 +388,13 @@ async function refreshHistory(){
   const list = await api.sessions();
   $("#hist-list").innerHTML = list.length? list.map(h=>`<div class="hitem${h.folder===summaryFolder?" cur":""}" data-f="${esc(h.folder)}">
     <b>${esc(h.title)}</b><div class="muted"><span>${esc((h.started||"").replace("T"," ").slice(0,16))}</span>
-    <span>${fmt(h.duration)}</span><span>${h.count} 句</span>${h.has_summary?"<span>✓ 已总结</span>":""}</div></div>`).join("")
+    <span>${fmt(h.duration)}</span><span>${h.count} 句</span>${h.has_summary?"<span>✓ 已总结</span>":""}${h.usd?`<span>$${h.usd.toFixed(2)}</span>`:""}</div></div>`).join("")
     : `<p class="muted" style="padding:12px">还没有记录</p>`;
   document.querySelectorAll(".hitem").forEach(el=> el.onclick=()=>openHistory(el.dataset.f));
 }
 async function openHistory(folder){
   if(recording){ toast("正在录音，先停止再看历史"); return; }
-  const s = await api.load_session(folder); viewing=s; showSession(s); closeDrawers();
+  const s = await api.load_session(folder); viewing=s; showSession(s); closeDrawers(); showCost(s.usage);
   setStatus("正在查看：" + s.title); $("#title").value=""; if(s.summary) openSide();
 }
 function closeDrawers(){ $("#history").classList.remove("show"); $("#modal").classList.remove("show"); $("#scrim").classList.remove("show"); }
@@ -410,9 +418,20 @@ function applyView(){
   const cloud = S.has_api_key && (S.use_cloud_translate || S.use_cloud_summary);
   let hideBar=false; try{ hideBar = sessionStorage.getItem("keybarX")==="1"; }catch{}
   $("#keybar").classList.toggle("show", !(S.has_api_key && S.use_cloud_translate) && !hideBar);
-  $("#modePill").textContent = cloud? "Claude 已连接" : "本地离线模式"; $("#modePill").className = "pill"+(cloud?" cloud":"");
+  $("#modePill").textContent = cloud? "Claude 已连接" : "本地离线模式";
+  const tierOn = S.has_api_key && S.use_cloud_translate;
+  $("#tierCtl").style.display = tierOn? "" : "none";
+  document.querySelectorAll("#tierCtl button").forEach(b=>b.classList.toggle("on", b.dataset.t===(S.translate_tier||"best"))); $("#modePill").className = "pill"+(cloud?" cloud":"");
 }
 document.querySelectorAll("#viewMode button").forEach(b=> b.onclick=()=>save({display_mode:b.dataset.m}));
+document.querySelectorAll("#tierCtl button").forEach(b=> b.onclick=async ()=>{ await save({translate_tier:b.dataset.t});
+  toast(b.dataset.t==="best"? "精准档：逐句翻译，最快最准" : "省钱档：攒几句一起翻，约省一半，中文晚 2–3 秒"); });
+function showCost(u){
+  const el=$("#costPill");
+  if(!u || !u.requests){ el.style.display="none"; return; }
+  el.style.display=""; el.textContent = "本节 $" + (u.usd<0.1? u.usd.toFixed(3) : u.usd.toFixed(2));
+  el.title = `本节课 Claude 花费（估算）：$${u.usd.toFixed(4)}\n请求 ${u.requests} 次 · 输入 ${u.in} tokens · 输出 ${u.out} tokens`;
+}
 $("#fontDown").onclick=()=>save({font_size:Math.max(14,(S.font_size||20)-2)});
 $("#fontUp").onclick=()=>save({font_size:Math.min(40,(S.font_size||20)+2)});
 let onTop=false; $("#topBtn").onclick=async ()=>{ onTop=await api.set_on_top(!onTop); $("#topBtn").classList.toggle("active",onTop); toast(onTop?"窗口已置顶":"取消置顶"); };

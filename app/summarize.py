@@ -183,11 +183,12 @@ class Summarizer:
             with self.lock:
                 self.chunk_notes[c] = n
 
-    def summarize_cloud(self, sentences, api_key, model, progress=lambda p, msg: None) -> str:
+    def summarize_cloud(self, sentences, api_key, model, progress=lambda p, msg: None, usage=None) -> str:
         text = " ".join(sentences)
         if not text.strip():
             return "（还没有内容可以总结）"
         progress(0.1, "正在请 Claude 总结…")
-        out = claude_chat(api_key, model, CLOUD_SYSTEM, "课堂转写：\n" + text, max_tokens=4000, timeout=180)
+        out = claude_chat(api_key, model, CLOUD_SYSTEM, "课堂转写：\n" + text, max_tokens=4000, timeout=180,
+                          usage=usage)
         progress(1.0, "完成")
         return out

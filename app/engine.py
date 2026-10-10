@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from audio import Capture
-from cloud import CloudError
+from cloud import CloudError, cost_usd
 from config import Settings
 from models import Download, MODELS, is_installed
 from summarize import Summarizer
@@ -16,6 +16,11 @@ from summarize import Summarizer
 
 def _safe(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "未命名"
+
+
+BATCH_MAX = 3        # economy tier: send after this many sentences…
+BATCH_WORDS = 45     # …or this many words…
+BATCH_WAIT = 2.5     # …or this many seconds after the first one, whichever comes first
 
 
 class Session:
@@ -26,6 +31,7 @@ class Session:
         self.segments = []   # {id, t, en, zh}
         self.summary = ""
         self.duration = 0.0
+        self.usage = {}
 
     @classmethod
     def new(cls, root: Path, title: str):
@@ -42,11 +48,13 @@ class Session:
         s.segments = d.get("segments", [])
         s.summary = d.get("summary", "")
         s.duration = d.get("duration", 0.0)
+        s.usage = d.get("usage", {})
         return s
 
     def to_dict(self):
         return {"title": self.title, "started": self.started, "duration": self.duration,
-                "segments": self.segments, "summary": self.summary, "folder": str(self.folder)}
+                "segments": self.segments, "summary": self.summary, "folder": str(self.folder),
+                "usage": self.usage}
 
     def save(self):
         tmp = self.folder / "data.json.tmp"
@@ -82,6 +90,12 @@ class Engine:
         self.downloads = {}
         self._dirty = False
         self.level = 0.0
+        self.batch = []            # economy tier: sentences waiting to be sent together
+        self.batch_t0 = 0.0
+        self.batch_lock = threading.Lock()
+        self.usage = {"in": 0, "out": 0, "requests": 0}
+        self.usage_lock = threading.Lock()
+        threading.Thread(target=self._batch_timer, daemon=True).start()
         for _ in range(3):  # parallel workers so a slow reply never holds up later sentences
             threading.Thread(target=self._translate_loop, daemon=True).start()
         threading.Thread(target=self._autosave_loop, daemon=True).start()
@@ -135,6 +149,8 @@ class Engine:
                                      and not source_id.startswith("file:"))
         self.session = Session.new(self.settings.sessions_dir(), title)
         self.summarizer.chunk_notes.clear()
+        with self.usage_lock:
+            self.usage = {"in": 0, "out": 0, "requests": 0}
         self.emit("session", session=self.session.to_dict())
         self.settings.update({"source": source_id})
         rec = self.recognizer
@@ -165,6 +181,7 @@ class Engine:
         if self.recognizer:
             self.recognizer.stop()
             self.recognizer = None
+        self._flush_batch()
         self.tr_q.join()
         if self.session:
             self.session.duration = time.time() - self.t_start
@@ -184,11 +201,57 @@ class Engine:
         seg = {"id": len(s.segments), "t": round(start, 1), "en": text, "zh": ""}
         s.segments.append(seg)
         self.emit("final", seg=seg)
-        self.tr_q.put(seg)
         self._dirty = True
+        if self._cloud_tr() and self.settings.get("translate_tier") == "saver":
+            from translate import filler_translation
+            f = filler_translation(text)
+            if f is not None:
+                seg["zh"] = f
+                self.emit("translated", id=seg["id"], zh=f)
+            else:
+                with self.batch_lock:
+                    if not self.batch:
+                        self.batch_t0 = time.monotonic()
+                    self.batch.append(seg)
+                    words = sum(len(x["en"].split()) for x in self.batch)
+                    full = len(self.batch) >= BATCH_MAX or words >= BATCH_WORDS
+                if full:
+                    self._flush_batch()
+        else:
+            self.tr_q.put([seg])
         self._maybe_presummarize()
 
     # ---------- translation ----------
+    def _cloud_tr(self):
+        return bool(self.settings.get("api_key")) and bool(self.settings.get("use_cloud_translate"))
+
+    def _flush_batch(self):
+        with self.batch_lock:
+            segs, self.batch = self.batch, []
+        if segs:
+            self.tr_q.put(segs)
+
+    def _batch_timer(self):
+        while True:
+            time.sleep(0.2)
+            with self.batch_lock:
+                due = self.batch and time.monotonic() - self.batch_t0 >= BATCH_WAIT
+            if due:
+                self._flush_batch()
+
+    def _add_usage(self, u):
+        if not u:
+            return
+        with self.usage_lock:
+            self.usage["in"] += u.get("in", 0)
+            self.usage["out"] += u.get("out", 0)
+            self.usage["requests"] += 1
+            d = dict(self.usage)
+        d["usd"] = round(cost_usd(self.settings.get("cloud_model"), d["in"], d["out"]), 4)
+        if self.session:
+            self.session.usage = d
+        self.emit("cost", **d)
+
     def _translator(self):
         key = self.settings.get("api_key")
         if key and self.settings.get("use_cloud_translate"):
@@ -206,30 +269,68 @@ class Engine:
 
     def _translate_loop(self):
         while True:
-            seg = self.tr_q.get()
+            segs = self.tr_q.get()
             try:
-                ctx = [x["en"] for x in self.session.segments[max(0, seg["id"] - 3):seg["id"]]] \
-                    if self.session else []
-                try:
-                    tr = self._translator()
-                    if hasattr(tr, "translate_stream"):
-                        zh, last = "", 0.0
-                        for zh in tr.translate_stream(seg["en"], ctx):
-                            if time.monotonic() - last > 0.12:
-                                last = time.monotonic()
-                                self.emit("translating", id=seg["id"], zh=zh)
-                    else:
-                        zh = tr.translate(seg["en"], ctx)
-                except CloudError as e:
-                    self.emit("warning", text=f"{e}（这句已改用本地翻译）")
-                    zh = self._local_translator().translate(seg["en"])
-                seg["zh"] = zh
-                self.emit("translated", id=seg["id"], zh=zh)
-                self._dirty = True
+                self._translate_segs(segs)
             except Exception as e:
                 self.emit("warning", text=f"翻译出错：{e}")
             finally:
                 self.tr_q.task_done()
+
+    def _context_before(self, seg_id, n):
+        if not self.session:
+            return []
+        return [x["en"] for x in self.session.segments[max(0, seg_id - n):seg_id]]
+
+    def _finish(self, seg, zh):
+        seg["zh"] = zh
+        self.emit("translated", id=seg["id"], zh=zh)
+        self._dirty = True
+
+    def _translate_segs(self, segs):
+        tr = self._translator()
+        if len(segs) > 1 or (self._cloud_tr() and self.settings.get("translate_tier") == "saver"):
+            return self._translate_batch(segs)
+        seg = segs[0]
+        ctx = self._context_before(seg["id"], 4)
+        usage = {}
+        try:
+            if hasattr(tr, "translate_stream"):
+                zh, last = "", 0.0
+                for zh in tr.translate_stream(seg["en"], ctx, usage=usage):
+                    if time.monotonic() - last > 0.12:
+                        last = time.monotonic()
+                        self.emit("translating", id=seg["id"], zh=zh)
+            else:
+                zh = tr.translate(seg["en"], ctx)
+        except CloudError as e:
+            self.emit("warning", text=f"{e}（这句已改用本地翻译）")
+            zh = self._local_translator().translate(seg["en"])
+        finally:
+            self._add_usage(usage)
+        self._finish(seg, zh)
+
+    def _translate_batch(self, segs):
+        from translate import BatchTranslator
+        bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"),
+                             self.session.title if self.session else "")
+        ctx = self._context_before(segs[0]["id"], 2)
+        usage, got, last = {}, {}, 0.0
+        try:
+            for got in bt.translate_stream([x["en"] for x in segs], ctx, usage=usage):
+                if time.monotonic() - last > 0.12:
+                    last = time.monotonic()
+                    for i, zh in got.items():
+                        self.emit("translating", id=segs[i]["id"], zh=zh)
+        except CloudError as e:
+            self.emit("warning", text=f"{e}（这几句已改用本地翻译）")
+        finally:
+            self._add_usage(usage)
+        for i, seg in enumerate(segs):
+            zh = got.get(i, "")
+            if not zh:
+                zh = self._local_translator().translate(seg["en"])
+            self._finish(seg, zh)
 
     def _autosave_loop(self):
         while True:
@@ -281,8 +382,18 @@ class Engine:
         try:
             if self._use_cloud_summary():
                 try:
+                    u = {}
                     out = self.summarizer.summarize_cloud(sentences, self.settings.get("api_key"),
-                                                          self.settings.get("cloud_model"), progress)
+                                                          self.settings.get("cloud_model"), progress, usage=u)
+                    if self.session and session.folder == self.session.folder:
+                        self._add_usage(u)
+                    else:
+                        su = session.usage or {"in": 0, "out": 0, "requests": 0}
+                        su["in"] = su.get("in", 0) + u.get("in", 0)
+                        su["out"] = su.get("out", 0) + u.get("out", 0)
+                        su["requests"] = su.get("requests", 0) + 1
+                        su["usd"] = round(cost_usd(self.settings.get("cloud_model"), su["in"], su["out"]), 4)
+                        session.usage = su
                 except CloudError as e:
                     self.emit("warning", text=f"{e}（改用本地总结）")
                     out = self._local_summary(sentences, progress)
@@ -315,7 +426,8 @@ class Engine:
                 d = json.loads(f.read_text(encoding="utf-8"))
                 out.append({"folder": str(f.parent), "title": d.get("title"), "started": d.get("started"),
                             "duration": d.get("duration", 0), "count": len(d.get("segments", [])),
-                            "has_summary": bool(d.get("summary"))})
+                            "has_summary": bool(d.get("summary")),
+                            "usd": (d.get("usage") or {}).get("usd", 0)})
             except Exception:
                 pass
         return out

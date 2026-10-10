@@ -6,7 +6,7 @@ from pathlib import Path
 
 APP_NAME = "ClassInterpreter"
 APP_TITLE = "课堂同传"
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 
 
 def resource_dir() -> Path:
@@ -43,6 +43,7 @@ def default_sessions_dir() -> Path:
 DEFAULTS = {
     "api_key": "",                 # Claude API key; empty = fully local
     "use_cloud_translate": True,   # only used when api_key is set
+    "translate_tier": "best",      # best (per sentence, instant) | saver (batched, ~half the cost)
     "use_cloud_summary": True,     # only used when api_key is set
     "cloud_model": "claude-haiku-4-5",
     "asr_model": "moonshine",      # moonshine (light) | parakeet (accurate, ~1GB RAM)

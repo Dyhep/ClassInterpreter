@@ -88,13 +88,77 @@ class CloudTranslator:
             msg += "【前文，仅供理解，不要翻译】\n" + "\n".join(context[-4:]) + "\n\n"
         return msg + "【请翻译这一句】\n" + text
 
-    def translate(self, text: str, context=None) -> str:
+    def translate(self, text: str, context=None, usage=None) -> str:
         return claude_chat(self.api_key, self.model, self.system, self._message(text, context),
-                           max_tokens=600).strip()
+                           max_tokens=600, usage=usage).strip()
 
-    def translate_stream(self, text: str, context=None):
+    def translate_stream(self, text: str, context=None, usage=None):
         """Yields the growing translation."""
         out = ""
-        for piece in claude_stream(self.api_key, self.model, self.system, self._message(text, context)):
+        for piece in claude_stream(self.api_key, self.model, self.system, self._message(text, context),
+                                   usage=usage):
             out += piece
             yield out.strip()
+
+
+# ---------------- economy tier: several sentences per request ----------------
+
+SYSTEM_BATCH = (
+    "课堂同传：把编号的英文语音转写逐句译成简体中文。结合前文和上下句理解，按意思修正明显的识别错误；"
+    "术语用学科通用译名，首次出现时括注英文。每句输出一行“编号. 译文”，编号与原文一致，不要合并或遗漏，不加其他内容。"
+)
+
+_LINE = re.compile(r"^\s*(\d+)\s*[.、．:：)]\s*(.*)$")
+
+
+class BatchTranslator:
+    def __init__(self, api_key: str, model: str, topic: str = ""):
+        self.api_key = api_key
+        self.model = model
+        self.system = SYSTEM_BATCH + (f"\n课程：{topic}" if topic else "")
+
+    def translate_stream(self, sentences, context=None, usage=None):
+        """Yields {index: translation-so-far} (0-based) as the reply streams in."""
+        msg = ""
+        if context:
+            msg += "前文（不译）：" + " ".join(context[-2:]) + "\n\n"
+        msg += "\n".join(f"{i + 1}. {t}" for i, t in enumerate(sentences))
+        out, buf = {}, ""
+        for piece in claude_stream(self.api_key, self.model, self.system, msg,
+                                   max_tokens=120 * len(sentences) + 60, usage=usage):
+            buf += piece
+            out = {}
+            for line in buf.split("\n"):
+                m = _LINE.match(line)
+                if m:
+                    i = int(m.group(1)) - 1
+                    if 0 <= i < len(sentences):
+                        out[i] = m.group(2).strip()
+            yield dict(out)
+        if len(sentences) == 1 and not out and buf.strip():
+            out = {0: buf.strip()}  # model answered without the number
+            yield out
+
+
+# Short filler utterances that are not worth a request.
+FILLERS = {
+    "ok": "好的", "okay": "好的", "alright": "好", "all right": "好", "right": "对",
+    "yeah": "是的", "yes": "是的", "yep": "是的", "no": "不", "so": "那么", "um": "", "uh": "",
+    "hmm": "", "mm": "", "oh": "哦", "well": "嗯", "good": "好", "great": "很好", "cool": "好",
+    "thank you": "谢谢", "thanks": "谢谢", "sure": "当然", "exactly": "没错", "and": "", "you know": "",
+    "okay so": "好，那么", "so yeah": "嗯", "all right so": "好，那么", "any questions": "有问题吗？",
+}
+
+
+def filler_translation(text: str):
+    """Returns a Chinese rendering if `text` is just a filler word/phrase, else None."""
+    t = re.sub(r"[^a-z' ]", " ", text.lower())
+    t = " ".join(t.split())
+    if not t:
+        return ""
+    if t in FILLERS:
+        return FILLERS[t] or "（语气词）"
+    words = t.split()
+    if len(words) <= 3 and all(w in FILLERS or w in ("um", "uh", "so", "ok", "okay") for w in words):
+        return "（语气词）"
+    return None

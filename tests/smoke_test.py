@@ -51,6 +51,41 @@ def check_pipeline(wav):
     return e
 
 
+def check_cloud_tiers():
+    """Both translation tiers against a fake Claude server (no real key needed)."""
+    import threading
+    from http.server import ThreadingHTTPServer
+    sys.path.insert(0, str(ROOT / "tests"))
+    import cloud
+    import fake_claude
+    fake_claude.FIRST_TOKEN = 0.05
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), fake_claude.H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    cloud.API_URL = f"http://127.0.0.1:{srv.server_address[1]}/v1/messages"
+    lines = ["Okay.", "Today we talk about elasticity.", "Elasticity measures sensitivity to price.",
+             "Right.", "Gasoline demand is inelastic in the short run.", "The midterm is in two weeks."]
+    result = {}
+    for tier in ("best", "saver"):
+        e = engine.Engine()
+        e.settings.update({"api_key": "sk-ant-fake", "use_cloud_translate": True, "translate_tier": tier})
+        e.session = engine.Session.new(e.settings.sessions_dir(), "test")
+        e.recording = True
+        for i, l in enumerate(lines):
+            e._on_final(l, float(i))
+            time.sleep(0.4)
+        e._flush_batch()
+        e.tr_q.join()
+        segs = e.session.segments
+        assert all(s["zh"] for s in segs), f"{tier}: untranslated {segs}"
+        assert e.usage["requests"] > 0 and e.usage["in"] > 0, f"{tier}: usage not counted"
+        result[tier] = dict(e.usage)
+        print(f"  {tier}: {e.usage}")
+    assert result["saver"]["requests"] < result["best"]["requests"], "saver tier did not batch"
+    assert result["saver"]["in"] < result["best"]["in"], "saver tier did not reduce input"
+    srv.shutdown()
+    cloud.API_URL = "https://api.anthropic.com/v1/messages"
+
+
 def check_summary(e):
     print("summary (local)…")
     t = time.time()
@@ -63,6 +98,8 @@ def check_summary(e):
 if __name__ == "__main__":
     print("translate…")
     check_translate()
+    print("cloud tiers (fake server)…")
+    check_cloud_tiers()
     wav = os.environ.get("TEST_WAV")
     if wav:
         print("pipeline…")
