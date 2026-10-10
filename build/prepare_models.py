@@ -75,16 +75,23 @@ def llama(bin_dir: Path):
     headers = {}
     if os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
-    rel = json.loads(fetch("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", headers))
-    assets = [a for a in rel["assets"] if a["name"].endswith(".zip") and "win" in a["name"]]
-    pick = None
-    for want in (("cpu", "x64"), ("avx2", "x64")):
-        pick = next((a for a in assets if all(w in a["name"] for w in want)
-                     and "arm" not in a["name"]), None)
+    rels = json.loads(fetch("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=15", headers))
+    bad = ("cuda", "cudart", "vulkan", "sycl", "hip", "arm64", "opencl", "kompute")
+    pick, rel, seen = None, None, []
+    for r in rels:
+        names = [x["name"] for x in r.get("assets", [])]
+        seen += names[:5]
+        for want in (("win", "cpu", "x64"), ("win", "avx2", "x64")):
+            pick = next((x for x in r.get("assets", []) if x["name"].endswith(".zip")
+                         and all(w in x["name"] for w in want)
+                         and not any(b_ in x["name"] for b_ in bad)), None)
+            if pick:
+                break
         if pick:
+            rel = r
             break
     if not pick:
-        raise SystemExit("no windows cpu build found in llama.cpp release: " + ", ".join(a["name"] for a in assets))
+        raise SystemExit("no windows cpu build found in recent llama.cpp releases; saw: " + ", ".join(seen[:40]))
     print("llama.cpp asset:", pick["name"])
     data = fetch(pick["browser_download_url"])
     dest.mkdir(parents=True, exist_ok=True)
