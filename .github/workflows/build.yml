@@ -69,7 +69,7 @@ jobs:
           LLAMA_SERVER: ${{ github.workspace }}\dist_assets\bin\llama\llama-server.exe
           TEST_WAV: ${{ github.workspace }}\dist_assets\lecture.wav
           SUMMARY: "1"
-        run: python build/run.py python tests/smoke_test.py
+        run: python build/run.py --notice python tests/smoke_test.py
 
       - name: Remove test-only files from the bundle
         shell: pwsh
