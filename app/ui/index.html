@@ -452,7 +452,15 @@ $("#testKey").onclick=async ()=>{
   if(err){ $("#keyMsg").textContent="✗ "+err; return; }
   await save({api_key:k.startsWith("••••")?S.api_key:k}); $("#keyMsg").textContent="✓ 可以使用，已保存";
 };
-$("#apiKey").addEventListener("change", ()=>{ if(!$("#apiKey").value.trim()) save({api_key:""}); });
+$("#apiKey").addEventListener("change", async ()=>{
+  const k=$("#apiKey").value.trim();
+  if(!k){ await save({api_key:""}); $("#keyMsg").textContent="已清除，使用本地模式"; return; }
+  if(k.startsWith("••••")) return;
+  await save({api_key:k}); $("#keyMsg").textContent="已保存，正在测试…";
+  const err = await api.check_key(k);
+  $("#keyMsg").textContent = err? "✗ 已保存，但测试失败："+err : "✓ 可以使用，已保存";
+});
+$("#apiKey").addEventListener("paste", ()=> setTimeout(()=>$("#apiKey").dispatchEvent(new Event("change")), 50));
 $("#cloudTr").onchange=e=>save({use_cloud_translate:e.target.checked});
 $("#cloudSum").onchange=e=>save({use_cloud_summary:e.target.checked});
 document.querySelectorAll("input[name=asr]").forEach(r=> r.onchange=()=>{
