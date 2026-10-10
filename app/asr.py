@@ -9,7 +9,7 @@ import sherpa_onnx
 from models import model_path
 
 SR = 16000
-PREVIEW_EVERY = 0.6  # seconds between live-preview decodes
+PREVIEW_EVERY = 0.4  # seconds between live-preview decodes (at least)
 
 # Segmentation & audio conditioning (tuned on synthetic quiet / speaker-in-room / far-field classroom audio)
 CFG = {
@@ -264,7 +264,7 @@ class Recognizer:
                 a = max(self._hist_start, cut if cut is not None else sp_start)
                 audio = self._hist[a - self._hist_start:][-int(20 * SR):]
                 a = self._hist_start + len(self._hist) - len(audio)
-                if len(audio) > SR * 0.5:
+                if len(audio) > SR * 0.35:
                     t0 = time.monotonic()
                     text, words = self._decode_words(audio)
                     if words:
@@ -279,7 +279,7 @@ class Recognizer:
                         prev = [w for w, _ in words]
                     self.on_partial(text)
                     # slow computer -> preview less often so final sentences are never delayed
-                    preview_gap = max(PREVIEW_EVERY, 2.0 * (time.monotonic() - t0))
+                    preview_gap = max(PREVIEW_EVERY, 1.5 * (time.monotonic() - t0))
                 last_preview = time.monotonic()
         # flush
         self.vad.flush()

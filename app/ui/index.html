@@ -434,10 +434,10 @@ function addSeg(s){
       if(live.length>fw.length && norm(live[fw.length-1].textContent)===norm(fw[fw.length-1])) m=fw.length;
       keep=live.slice(m);
       for(const sp of live.slice(0,m)){ sp.classList.remove("new"); en.appendChild(sp); }
-      reconcile(en, fw, false);
+      reconcile(en, fw, true, false);
     }
     reserveZh(el);
-    if(keep.length) lastHyp=keep.map(x=>x.textContent.trim()); else resetLive();
+    if(keep.length){ lastHyp=keep.map(x=>x.textContent.trim()); liveTarget=lastHyp.slice(); } else resetLive();
   }, anchor);
 }
 function setZh(id, zh, live){
@@ -470,7 +470,7 @@ function swapWord(sp, w, now){
   delete sp.dataset.pend;
   sp.textContent=w+" "; sp.classList.remove("swap","new"); void sp.offsetWidth; sp.classList.add("swap");
 }
-function reconcile(box, words, animateNew){
+function reconcile(box, words, animateNew, damp){
   const spans=[...box.querySelectorAll("span.w")];
   const ops=align(spans.map(x=>norm(x.textContent)), words.map(norm));
   const want=[], drop=[];
@@ -479,10 +479,10 @@ function reconcile(box, words, animateNew){
     if(i>=0 && j>=0){ const sp=spans[i]; delete sp.dataset.pend; if(sp.textContent!==words[j]+" ") sp.textContent=words[j]+" "; want.push(sp); }
     else if(i>=0 && k+1<ops.length && ops[k+1][0]<0 && ops[k+1][1]>=0){
       // a word replaced by another: change it in place with a gentle colour fade
-      const sp=spans[i], jj=ops[++k][1]; swapWord(sp, words[jj], !animateNew); want.push(sp);
+      const sp=spans[i], jj=ops[++k][1]; swapWord(sp, words[jj], !damp); want.push(sp);
     }
     else if(j>=0 && k+1<ops.length && ops[k+1][1]<0 && ops[k+1][0]>=0){
-      const sp=spans[ops[++k][0]]; swapWord(sp, words[j], !animateNew); want.push(sp);
+      const sp=spans[ops[++k][0]]; swapWord(sp, words[j], !damp); want.push(sp);
     }
     else if(i>=0){ drop.push(spans[i]); }
     else {
@@ -494,22 +494,45 @@ function reconcile(box, words, animateNew){
   let delay=0;
   want.forEach((sp,k)=>{
     if(box.children[k]!==sp) box.insertBefore(sp, box.children[k]||null);
-    if(sp.classList.contains("new") && !sp.dataset.seen){ sp.dataset.seen="1"; sp.style.animationDelay=(delay+=90)-90+"ms"; }
+    if(sp.classList.contains("new") && !sp.dataset.seen){ sp.dataset.seen="1"; sp.style.animationDelay=(delay+=60)-60+"ms"; }
   });
 }
-function resetLive(){ $("#ptext").innerHTML=""; lastHyp=[]; $("#pdots").classList.remove("on"); }
+// ---- live line: follow the voice word by word ----
+// Each preview from the recognizer may hold several new words at once (a fast speaker says 4–6 words
+// between previews). Instead of dropping them in as a block, they are revealed one by one at about the
+// pace they were spoken, so the text flows with the audio. Only the newest word waits for confirmation.
+let liveTarget=[], dripT=null, lastP=0, gapEst=700;
+function resetLive(){ $("#ptext").innerHTML=""; lastHyp=[]; liveTarget=[]; clearTimeout(dripT); dripT=null; $("#pdots").classList.remove("on"); }
+function liveShown(){ return $("#ptext").querySelectorAll("span.w").length; }
+function drip(){
+  dripT=null;
+  const box=$("#ptext"), shown=liveShown(), pend=liveTarget.length-shown;
+  if(pend<=0) return;
+  glide(()=>reconcile(box, liveTarget.slice(0, shown+1), true, true), lastSeg);
+  if(pend>1){
+    // spread the waiting words over the time until the next preview; hurry if far behind
+    const step = pend>8 ? 45 : Math.max(60, Math.min(260, gapEst/pend));
+    dripT=setTimeout(drip, step);
+  }
+}
 function setPartial(text, silent){
   const box=$("#ptext");
   const words=(text||"").split(/\s+/).filter(Boolean);
   if(!words.length){ if(silent) resetLive(); else glide(resetLive, lastSeg); return; }
-  let agree=0; while(agree<lastHyp.length && agree<words.length && norm(lastHyp[agree])===norm(words[agree])) agree++;
-  if(!lastHyp.length) agree=Math.max(0, words.length-2);          // first guess: hold back the last two words
+  const now=performance.now();
+  if(lastP && now-lastP<3000) gapEst=Math.max(250, Math.min(1500, 0.6*gapEst+0.4*(now-lastP)));
+  lastP=now;
+  // the newest word is often cut mid-way ("hous…"): show it once the next preview agrees
+  let n=words.length-1;
+  if(lastHyp.length && norm(lastHyp[lastHyp.length-1])===norm(words[n])) n=words.length;
   lastHyp=words;
-  const shown=box.querySelectorAll("span.w").length;
-  const n=Math.min(words.length, Math.max(agree, shown));          // never take back words already shown
-  const apply=()=>{ reconcile(box, words.slice(0,n), true); $("#pdots").classList.add("on"); };
+  const shown=liveShown();
+  n=Math.max(n, Math.min(shown, words.length));                       // never take back shown words
+  liveTarget=words.slice(0, n);
   $("#empty").style.display="none";
+  const apply=()=>{ reconcile(box, liveTarget.slice(0, Math.min(shown, n)), true, true); $("#pdots").classList.add("on"); };
   if(silent) apply(); else glide(apply, lastSeg);
+  if(!dripT && liveTarget.length>liveShown()) drip();
 }
 function showLive(on){ $("#partial").classList.toggle("on", !!on); if(!on) resetLive(); }
 let curMeta=null, rrBusy=false;
@@ -611,7 +634,7 @@ async function pollLoop(){
     if(r.state && r.state!==recState) setRecState(r.state);
     if(r.recording){ $("#timer").textContent=fmt(r.elapsed); $("#level").style.width=Math.min(100, Math.sqrt(r.level)*260)+"%"; }
   }catch(err){ console.error(err); }
-  setTimeout(pollLoop, 250);
+  setTimeout(pollLoop, recState==="recording"? 120 : 250);
 }
 
 /* ---------- summary ---------- */
