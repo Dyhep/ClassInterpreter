@@ -164,7 +164,8 @@ def main():
     if not ui.exists():
         ui = Path(__file__).resolve().parent / "ui" / "index.html"
     window = webview.create_window(APP_TITLE, url=str(ui), js_api=api, width=1100, height=760,
-                                   min_size=(420, 360), background_color="#F7F6F2")
+                                   min_size=(420, 360), background_color="#F7F6F2",
+                                   text_select=True)  # pywebview blocks text selection by default
     api._window = window
 
     def on_closing():

@@ -138,6 +138,9 @@ footer{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 1
 .opt b{display:block}
 .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0}
 .switch input{width:38px;height:22px;accent-color:var(--accent)}
+/* text must stay selectable (selection toolbar), even if the window toolkit disables it */
+#transcript,#transcript *,#sumBody,#sumBody *,#chatBody,#chatBody *,textarea,input{-webkit-user-select:text!important;user-select:text!important}
+#transcript .t,.chat-head,.chat-head *{-webkit-user-select:none!important;user-select:none!important}
 /* ---------- AI 助教 ---------- */
 #selbar{position:fixed;z-index:30;display:none;gap:2px;padding:4px;background:var(--ink);border-radius:10px;box-shadow:var(--shadow)}
 #selbar.show{display:flex}
