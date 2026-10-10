@@ -1,0 +1,58 @@
+Okay.
+Good morning everyone, let's get started.
+Today we're going to continue our discussion of supply and demand.
+Last week we talked about the law of demand,
+which says that when the price of a good goes up, the quantity demanded goes down.
+Right.
+Now I want to introduce a really important idea called price elasticity of demand.
+Elasticity measures how sensitive the quantity demanded is to a change in price.
+So if a small change in price leads to a big change in quantity,
+we say demand is elastic.
+Um, so.
+If a big change in price only leads to a small change in quantity, demand is inelastic.
+Let me give you an example with gasoline.
+When gas prices go up by ten percent, people still need to drive to work,
+so the quantity demanded only falls by maybe two or three percent in the short run.
+That means gasoline has relatively inelastic demand.
+Yeah.
+Compare that with something like a specific brand of cereal.
+If one brand raises its price, you can easily switch to another brand,
+so demand for that particular brand is very elastic.
+The formula is the percentage change in quantity demanded divided by the percentage change in price.
+And we usually take the absolute value, so elasticity is a positive number.
+If the absolute value is greater than one, demand is elastic.
+If it's less than one, it's inelastic, and if it's exactly one we call it unit elastic.
+All right.
+Why do businesses care about this?
+Because elasticity tells you what happens to total revenue when you change your price.
+Total revenue is just price times quantity.
+If demand is inelastic, raising the price actually increases total revenue,
+because quantity doesn't fall very much.
+But if demand is elastic, raising the price decreases total revenue.
+This is why airlines charge business travelers so much more than vacation travelers.
+Business travelers have inelastic demand, they have to be at that meeting on Tuesday.
+Vacation travelers are flexible and very price sensitive.
+Okay so.
+What determines whether demand is elastic or inelastic?
+There are four main factors I want you to write down.
+First, the availability of close substitutes.
+The more substitutes there are, the more elastic demand is.
+Second, whether the good is a necessity or a luxury.
+Necessities like insulin tend to be inelastic, luxuries tend to be elastic.
+Third, the definition of the market.
+Narrowly defined markets, like vanilla ice cream, are more elastic than broad ones, like food.
+And fourth, the time horizon.
+Demand is usually more elastic in the long run, because people have time to adjust.
+For example, if gas stays expensive for years, people buy more fuel efficient cars.
+Any questions so far?
+Yes, in the back.
+Good question, the question was whether elasticity is the same as the slope of the demand curve.
+The answer is no, and this is a really common mistake on the exam.
+Slope depends on the units you use, but elasticity is unit free because it uses percentages.
+Along a straight line demand curve, elasticity actually changes at every point.
+It's elastic at the top and inelastic at the bottom.
+Okay.
+For next week, please read chapter five, sections one through three.
+And remember that problem set three is due Friday at five pm on Canvas.
+The midterm will be two weeks from today and it will cover chapters one through five.
+All right, see you on Thursday.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 APP_NAME = "ClassInterpreter"
 APP_TITLE = "课堂同传"
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 
 def resource_dir() -> Path:
@@ -46,7 +46,9 @@ DEFAULTS = {
     "translate_tier": "best",      # best (per sentence, instant) | saver (batched, ~half the cost)
     "use_cloud_summary": True,     # only used when api_key is set
     "cloud_model": "claude-haiku-4-5",
-    "asr_model": "moonshine",      # moonshine (light) | parakeet (accurate, ~1GB RAM)
+    "asr_model": "moonshine",      # (old setting, ignored unless asr_choice says otherwise)
+    "asr_choice": "auto",          # auto (high-precision once downloaded) | moonshine | parakeet
+    "save_audio": True,            # keep a compressed recording of each class (~17 MB/hour)
     "live_preview": True,          # show text while the speaker is still talking
     "background_summary": False,   # pre-summarize chunks during class (local mode)
     "threads": 0,                  # 0 = auto

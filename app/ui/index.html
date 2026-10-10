@@ -271,6 +271,7 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
     <div class="side-foot">
       <button class="btn primary" id="makeSum">生成总结</button>
       <button class="btn" id="openFolder">打开文件夹</button>
+      <button class="btn" id="rrBtn" title="用高精度模型把整节课的录音重新识别、重新翻译（漏词会少很多）">重新识别</button>
       <span class="muted" id="sumMode"></span>
       <div class="progress" id="sumProg" style="display:none"><i></i></div>
       <span class="muted" id="sumMsg"></span>
@@ -305,7 +306,7 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
     <div class="body">
       <div class="sec">
         <h4>Claude API（可选，让翻译和总结更好）</h4>
-        <div class="muted" style="line-height:1.7">不填也能用，全部在本机离线运行、免费。填了以后翻译和总结交给 Claude，质量明显更好，大约每小时课 $0.15。
+        <div class="muted" style="line-height:1.7">不填也能用，全部在本机离线运行、免费。填了以后翻译和总结交给 Claude，质量明显更好，大约每小时课 $0.3–0.65（看档位）。
           <br>获取方法：打开 console.anthropic.com → 注册登录 → Billing 充值（$5 起）→ API Keys → Create Key，复制 sk-ant- 开头的那串粘贴到下面，点“测试”。</div>
         <div class="row"><input id="apiKey" class="field" style="flex:1;min-width:220px" placeholder="sk-ant-..." autocomplete="off">
           <button class="btn" id="testKey">测试</button></div>
@@ -318,11 +319,13 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
       </div>
       <div class="sec">
         <h4>语音识别模型</h4>
-        <label class="opt" data-asr="moonshine"><input type="radio" name="asr" value="moonshine">
-          <div><b>轻量（推荐配置一般的电脑）</b><span class="muted">约 500MB 内存，速度快</span></div></label>
         <label class="opt" data-asr="parakeet"><input type="radio" name="asr" value="parakeet">
-          <div><b>高精度</b><span class="muted">约 1GB 内存，口音、专业词更准 <span id="parakeetState"></span></span></div></label>
+          <div><b>高精度（推荐）</b><span class="muted">漏词、错词少很多，约 1GB 内存 <span id="parakeetState"></span></span></div></label>
+        <label class="opt" data-asr="moonshine"><input type="radio" name="asr" value="moonshine">
+          <div><b>轻量</b><span class="muted">只在电脑实在跟不上时用，错词明显更多</span></div></label>
         <div class="switch"><span>说话时实时预览（关掉更省电）</span><input type="checkbox" id="preview"></div>
+        <div class="switch"><span>保存每节课的录音（约 17MB/小时，可以课后“重新识别”）</span><input type="checkbox" id="saveAudio"></div>
+        <div class="muted" style="line-height:1.7">收音建议：坐得离老师近一些，电脑别放在会被敲击的桌面中间；网课 / Zoom 请选“电脑声音”，比用麦克风收外放清楚得多。</div>
       </div>
       <div class="sec">
         <h4>本地 AI 总结模型</h4>
@@ -445,7 +448,32 @@ function setPartial(text, silent){
   glide(apply, lastSeg);
 }
 function showLive(on){ $("#partial").classList.toggle("on", !!on); if(!on){ $("#ptext").innerHTML=""; pWords=[]; } }
+let curMeta=null, rrBusy=false;
+function renderRR(){
+  const b=$("#rrBtn"); if(!b) return;
+  const show = !!(curMeta && curMeta.has_audio && curMeta.folder===summaryFolder) && recState==="idle";
+  b.style.display = show? "" : "none"; b.disabled = rrBusy;
+}
+function rrProgress(p, text){
+  rrBusy = p>0 && p<1; renderRR();
+  const bar=$("#sumProg"); bar.style.display = rrBusy? "block":"none"; bar.firstElementChild.style.width=(p*100)+"%";
+  $("#sumMsg").textContent = rrBusy? text : ""; if(rrBusy) setStatus(text);
+}
+$("#rrBtn").onclick=async ()=>{
+  if(!curMeta) return;
+  const mins=Math.max(1, Math.round((curMeta.duration||0)/60));
+  const cloud=S.has_api_key && S.use_cloud_translate;
+  if(!confirmBar(`用高精度模型重新识别这节课（约 ${mins} 分钟录音），并重新翻译${cloud? `（约 $${(0.3*mins/60).toFixed(2)}）`:""}。原来的结果会备份。`)) return;
+};
+function confirmBar(msg){
+  const t=$("#toast"); t.className=""; t.innerHTML=esc(msg)+'<button>开始</button>'; t.style.display="block";
+  t.querySelector("button").onclick=async ()=>{ t.style.display="none"; rrProgress(0.01,"准备中…");
+    const r=await api.rerecognize(curMeta.folder); if(r.error){ rrProgress(0,""); toast(r.error,true); } };
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none", 9000);
+  return false;
+}
 function showSession(sess){
+  curMeta=sess; setTimeout(renderRR,0);
   flow().style.transform="";
   $("#segs").innerHTML = sess.segments.map(segHtml).join("");
   const l=lastSeg(); if(l) l.classList.add("latest");
@@ -483,6 +511,7 @@ function setRecState(st){
   $("#source").disabled = $("#title").disabled = $("#importBtn").disabled = st!=="idle";
   if(st==="idle"){ $("#timer").textContent=""; $("#level").style.width="0"; }
   showLive(st==="starting" || st==="recording");
+  if(typeof renderRR==="function") renderRR();
 }
 function setRecording(on){ setRecState(on? "recording" : "idle"); }
 function setStatus(t){ $("#status").textContent=t; }
@@ -504,7 +533,10 @@ async function pollLoop(){
         case "warning": setStatus(e.text); break;
         case "error": toast(e.text, true); setStatus(e.text); break;
         case "state": setRecState(e.state); break;
-        case "stopped": refreshHistory(); if(e.session && e.session.segments.length) { openSide(); } break;
+        case "rerec_progress": if(e.folder===summaryFolder) rrProgress(e.p, e.text); break;
+        case "rerec_done": rrProgress(0,""); setStatus("重新识别完成"); refreshHistory(); if(e.folder===summaryFolder){ showSession(e.session); toast("重新识别完成"); } break;
+        case "models_changed": api.models().then(m=>{ models=m; renderModelStates(); }); break;
+        case "stopped": if(e.session) curMeta=e.session; renderRR(); refreshHistory(); if(e.session && e.session.segments.length) { openSide(); } break;
         case "summary_progress": if(e.folder===summaryFolder) sumProgress(e.p, e.text); break;
         case "chat_text": case "chat_event": case "chat_done": case "chat_error": onChatEvent(e); break;
         case "note_key": onNoteKey(e); break;
@@ -618,7 +650,9 @@ function fillSettings(){
   $("#apiKey").value = S.api_key||"";
   $("#cloudTr").checked=!!S.use_cloud_translate; $("#cloudSum").checked=!!S.use_cloud_summary;
   $("#cloudTr").disabled=$("#cloudSum").disabled=!S.has_api_key;
-  document.querySelectorAll(".opt").forEach(o=>{ const on=o.dataset.asr===S.asr_model; o.classList.toggle("sel",on); o.querySelector("input").checked=on; });
+  const asrSel = S.asr_choice==="moonshine"? "moonshine" : "parakeet";
+  document.querySelectorAll(".opt").forEach(o=>{ const on=o.dataset.asr===asrSel; o.classList.toggle("sel",on); o.querySelector("input").checked=on; });
+  $("#saveAudio").checked = S.save_audio!==false;
   $("#preview").checked=!!S.live_preview; $("#bgSum").checked=!!S.background_summary;
   $("#dirPath").textContent = S.sessions_dir || "文档\\课堂同传记录";
   renderModelStates();
@@ -659,8 +693,9 @@ $("#apiKey").addEventListener("paste", ()=> setTimeout(()=>$("#apiKey").dispatch
 $("#cloudTr").onchange=e=>save({use_cloud_translate:e.target.checked});
 $("#cloudSum").onchange=e=>save({use_cloud_summary:e.target.checked});
 document.querySelectorAll("input[name=asr]").forEach(r=> r.onchange=()=>{
-  if(r.value==="parakeet" && !models.parakeet?.installed){ toast("高精度模型需要先下载"); dl("parakeet"); }
-  save({asr_model:r.value}); });
+  if(r.value==="parakeet" && !models.parakeet?.installed && !models.parakeet?.downloading){ toast("正在下载高精度模型，下载完自动使用"); dl("parakeet"); }
+  save({asr_choice: r.value==="parakeet"? "auto" : "moonshine"}); });
+$("#saveAudio").onchange=e=>save({save_audio:e.target.checked});
 $("#preview").onchange=e=>save({live_preview:e.target.checked});
 $("#bgSum").onchange=e=>save({background_summary:e.target.checked});
 $("#chooseDir").onclick=async ()=>{ S=await api.choose_sessions_dir(); fillSettings(); };

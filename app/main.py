@@ -68,6 +68,9 @@ class Api:
         title = title or Path(path).stem
         return self.start(f"file:{path}?speed=30", title)
 
+    def rerecognize(self, folder):
+        return self._e.rerecognize(folder)
+
     def summarize(self, folder=""):
         return self._e.summarize(folder)
 

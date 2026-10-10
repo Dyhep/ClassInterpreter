@@ -7,6 +7,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 from audio import Capture
 from cloud import CloudError, cost_usd, usage_usd
 from config import Settings
@@ -32,6 +34,7 @@ class Session:
         self.summary = ""
         self.duration = 0.0
         self.usage = {}
+        self.audio = ""      # recording of the class (file name in the folder, or a full path for imports)
 
     @classmethod
     def new(cls, root: Path, title: str):
@@ -49,12 +52,21 @@ class Session:
         s.summary = d.get("summary", "")
         s.duration = d.get("duration", 0.0)
         s.usage = d.get("usage", {})
+        s.audio = d.get("audio", "")
         return s
+
+    def audio_path(self):
+        if not self.audio:
+            return None
+        p = Path(self.audio)
+        p = p if p.is_absolute() else self.folder / p
+        return p if p.exists() else None
 
     def to_dict(self):
         return {"title": self.title, "started": self.started, "duration": self.duration,
                 "segments": self.segments, "summary": self.summary, "folder": str(self.folder),
-                "usage": self.usage}
+                "usage": self.usage, "audio": self.audio,
+                "has_audio": bool(self.audio_path())}
 
     def save(self):
         tmp = self.folder / "data.json.tmp"
@@ -143,8 +155,10 @@ class Engine:
     # ---------- recording ----------
     # ---------- models are loaded once and kept ----------
     def _asr_name(self):
-        name = self.settings.get("asr_model")
-        return name if is_installed(name) else "moonshine"
+        choice = self.settings.get("asr_choice") or "auto"
+        if choice == "moonshine":
+            return "moonshine"
+        return "parakeet" if is_installed("parakeet") else "moonshine"
 
     def _get_asr_model(self, name=None):
         from asr import make_recognizer
@@ -156,6 +170,8 @@ class Engine:
 
     def _warmup(self):
         """Load the speech model (and the offline translator) right after launch, so 开始 is instant."""
+        if self.settings.get("asr_choice") != "moonshine" and not is_installed("parakeet"):
+            self._auto_download_parakeet()
         try:
             self._get_asr_model()
             import asr
@@ -166,6 +182,28 @@ class Engine:
             self._local_translator()
         except Exception:
             pass
+
+    def _auto_download_parakeet(self):
+        """The high-precision model is ~4x more accurate; fetch it in the background on first launch."""
+        self.download("parakeet")
+        d = self.downloads["parakeet"]
+
+        def watch():
+            last = -1
+            while not d.done:
+                time.sleep(1)
+                pct = int(d.progress * 100) // 10 * 10
+                if pct != last and self.state == "idle":
+                    last = pct
+                    self.emit("status", text=f"正在后台下载高精度识别模型… {pct}%（下载完自动使用）")
+            if d.error:
+                self.emit("warning", text=f"高精度识别模型下载失败：{d.error}（可在设置里重试）")
+            else:
+                self.emit("status", text="高精度识别模型已就绪，下一次点“开始”会自动使用")
+                self.emit("models_changed")
+                if self.state == "idle":
+                    threading.Thread(target=self._get_asr_model, daemon=True).start()
+        threading.Thread(target=watch, daemon=True).start()
 
     # ---------- recording ----------
     def _set_state(self, st):
@@ -207,13 +245,37 @@ class Engine:
                 self._set_state("recording")
                 self.emit("status", text="正在聆听…")
 
-        rec = Recognizer(self._get_asr_model,
+        import asr
+        name = self._asr_name()
+        rec = Recognizer(lambda: self._get_asr_model(name),
                          lambda t: self._on_partial(t) if self.session is session else None,
                          lambda t, st: self._on_final(t, st, session),
                          live_preview=bool(self.settings.get("live_preview")) and not source_id.startswith("file:"),
-                         on_ready=ready, on_error=self._on_capture_error)
+                         on_ready=ready, on_error=self._on_capture_error, cfg=asr.cfg_for(name))
         self.recognizer = rec
-        self.capture = Capture(source_id, rec.push, on_error=self._on_capture_error,
+        sink = rec.push
+        self._audio_file = None
+        if source_id.startswith("file:"):
+            session.audio = source_id[5:].split("?speed=")[0]   # imported recording: remember where it is
+        elif self.settings.get("save_audio"):
+            try:
+                import soundfile as sf
+                self._audio_file = sf.SoundFile(str(session.folder / "录音.ogg"), "w", 16000, 1,
+                                                format="OGG", subtype="VORBIS")
+                session.audio = "录音.ogg"
+                af, lock = self._audio_file, threading.Lock()
+
+                def sink(block, _push=rec.push):
+                    _push(block)
+                    with lock:
+                        try:
+                            af.write(block)
+                        except Exception:
+                            pass
+                self._audio_lock = lock
+            except Exception as e:
+                self.emit("warning", text=f"无法保存录音：{e}")
+        self.capture = Capture(source_id, sink, on_error=self._on_capture_error,
                                on_level=self._on_level,
                                on_progress=lambda p: self.emit("status", text=f"正在处理录音文件… {p}%"),
                                on_done=lambda: threading.Thread(target=self.stop, daemon=True).start(),
@@ -225,8 +287,14 @@ class Engine:
     def _watch_lag(self, rec, session):
         """Warn once if the computer can't keep up (recognition falling behind real time)."""
         warned = False
+        quiet_warned, levels = False, []
         while self.session is session and self.state in ("starting", "recording"):
             time.sleep(2)
+            levels = (levels + [self.level])[-10:]          # ~20 s
+            if (not quiet_warned and self.state == "recording" and len(levels) == 10
+                    and max(levels) < 0.004 and not str(self.capture.source_id).startswith("file:")):
+                quiet_warned = True
+                self.emit("warning", text="几乎听不到声音：检查声音来源是否选对，或把电脑靠近声源 / 调大音量")
             behind = rec.backlog() / 10  # seconds
             if behind > 8 and not warned and self.state == "recording":
                 warned = True
@@ -256,6 +324,11 @@ class Engine:
             if rec and not rec.stop(timeout=30):
                 self.emit("warning", text="最后几句识别超时，已跳过")
             self.recognizer = None
+            af = getattr(self, "_audio_file", None)
+            if af is not None:
+                with self._audio_lock:
+                    af.close()
+                self._audio_file = None
             self._flush_batch()
             t0 = time.time()
             while self.tr_q.unfinished_tasks and time.time() - t0 < 25:
@@ -507,6 +580,108 @@ class Engine:
             raise RuntimeError("本地总结模型还没下载（设置 → 本地 AI 总结模型），或在设置里填写 Claude API key")
         threads = 2 if self.recording else max(2, self.settings.threads())
         return self.summarizer.summarize_local(sentences, threads, progress)
+
+    # ---------- re-recognize a finished class from its recording ----------
+    def rerecognize(self, folder):
+        if self.state != "idle":
+            return {"error": "正在录音，先停止再重新识别"}
+        if getattr(self, "_rerec_busy", False):
+            return {"error": "已经在重新识别了"}
+        s = Session.load(Path(folder))
+        if not s.audio_path():
+            return {"error": "这节课没有保存录音（v0.6 之前的课，或在设置里关掉了保存录音）"}
+        self._rerec_busy = True
+        threading.Thread(target=self._rerecognize, args=(s,), daemon=True).start()
+        return {"ok": True}
+
+    def _rerecognize(self, s):
+        import asr
+        import soundfile as sf
+        f = str(s.folder)
+
+        def prog(p, text):
+            self.emit("rerec_progress", folder=f, p=round(p, 3), text=text)
+        try:
+            name = "parakeet" if is_installed("parakeet") else self._asr_name()
+            prog(0.01, "正在用高精度模型重新识别…" if name == "parakeet" else "正在重新识别…")
+            model = self._get_asr_model(name)
+            finals = []
+            rec = asr.Recognizer(lambda: model, lambda t: None, lambda t, st: finals.append((st, t)),
+                                 live_preview=False, cfg=asr.cfg_for(name))
+            with sf.SoundFile(str(s.audio_path())) as af:
+                total = max(1, af.frames)
+                sr = af.samplerate
+                done = 0
+                for block in af.blocks(blocksize=sr * 2, dtype="float32", always_2d=True):
+                    x = block.mean(axis=1)
+                    if sr != 16000:
+                        n = int(len(x) * 16000 / sr)
+                        x = np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x).astype(np.float32)
+                    rec.push(x)
+                    done += len(block)
+                    while rec.backlog() > 50:
+                        time.sleep(0.05)
+                    if done % (sr * 30) < sr * 2:
+                        prog(0.02 + 0.68 * done / total, f"正在重新识别… {int(100 * done / total)}%")
+            rec.push(np.zeros(32000, dtype=np.float32))
+            rec.stop()
+            segs = [{"id": i, "t": round(st, 1), "en": t, "zh": ""} for i, (st, t) in enumerate(finals)]
+            if not segs:
+                raise RuntimeError("录音里没有识别出内容")
+            # translate everything again (several sentences per request: cheap and consistent)
+            prog(0.72, "正在重新翻译…")
+            self._translate_all(s, segs, lambda p: prog(0.72 + 0.27 * p, f"正在重新翻译… {int(100 * p)}%"))
+            backup = s.folder / "data.before-rerecognize.json"
+            if not backup.exists():
+                (s.folder / "data.json").replace(backup)
+            s.segments = segs
+            s.save()
+            prog(1.0, "完成")
+            self.emit("rerec_done", folder=f, session=s.to_dict())
+        except Exception as e:
+            self.emit("rerec_progress", folder=f, p=0, text="")
+            self.emit("error", text=f"重新识别失败：{e}")
+        finally:
+            self._rerec_busy = False
+
+    def _translate_all(self, s, segs, progress):
+        from translate import BatchTranslator, filler_translation
+        cloud = self._cloud_tr()
+        todo = []
+        for x in segs:
+            f = filler_translation(x["en"]) if cloud else None
+            if f is not None:
+                x["zh"] = f
+            else:
+                todo.append(x)
+        if not cloud:
+            tr = self._local_translator()
+            for i, x in enumerate(todo):
+                x["zh"] = tr.translate(x["en"])
+                progress((i + 1) / max(1, len(todo)))
+            return
+        bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"), s.title)
+        groups = [todo[i:i + 8] for i in range(0, len(todo), 8)]
+        done = [0]
+        lock = threading.Lock()
+
+        def work(g):
+            usage, got = {}, {}
+            ctx = [x["en"] for x in segs[max(0, g[0]["id"] - 2):g[0]["id"]]]
+            try:
+                for got in bt.translate_stream([x["en"] for x in g], ctx, usage=usage):
+                    pass
+            except CloudError:
+                got = {}
+            self._charge(s, usage)
+            for i, x in enumerate(g):
+                x["zh"] = got.get(i) or self._local_translator().translate(x["en"])
+            with lock:
+                done[0] += 1
+                progress(done[0] / len(groups))
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(4) as ex:
+            list(ex.map(work, groups))
 
     # ---------- AI 助教 ----------
     def _session_for(self, folder):
