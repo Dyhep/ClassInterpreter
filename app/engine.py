@@ -73,6 +73,7 @@ class Engine:
         self.recognizer = None
         self._rec_name = None
         self.local_tr = None
+        self._tr_lock = threading.Lock()
         self.tr_q = queue.Queue()
         self.recording = False
         self.t_start = 0.0
@@ -81,7 +82,8 @@ class Engine:
         self.downloads = {}
         self._dirty = False
         self.level = 0.0
-        threading.Thread(target=self._translate_loop, daemon=True).start()
+        for _ in range(3):  # parallel workers so a slow reply never holds up later sentences
+            threading.Thread(target=self._translate_loop, daemon=True).start()
         threading.Thread(target=self._autosave_loop, daemon=True).start()
 
     # ---------- events for the UI ----------
@@ -191,13 +193,15 @@ class Engine:
         key = self.settings.get("api_key")
         if key and self.settings.get("use_cloud_translate"):
             from translate import CloudTranslator
-            return CloudTranslator(key, self.settings.get("cloud_model"))
+            topic = self.session.title if self.session else ""
+            return CloudTranslator(key, self.settings.get("cloud_model"), topic)
         return self._local_translator()
 
     def _local_translator(self):
-        if self.local_tr is None:
-            from translate import LocalTranslator
-            self.local_tr = LocalTranslator(threads=2)
+        with self._tr_lock:
+            if self.local_tr is None:
+                from translate import LocalTranslator
+                self.local_tr = LocalTranslator(threads=2)
         return self.local_tr
 
     def _translate_loop(self):
@@ -207,7 +211,15 @@ class Engine:
                 ctx = [x["en"] for x in self.session.segments[max(0, seg["id"] - 3):seg["id"]]] \
                     if self.session else []
                 try:
-                    zh = self._translator().translate(seg["en"], ctx)
+                    tr = self._translator()
+                    if hasattr(tr, "translate_stream"):
+                        zh, last = "", 0.0
+                        for zh in tr.translate_stream(seg["en"], ctx):
+                            if time.monotonic() - last > 0.12:
+                                last = time.monotonic()
+                                self.emit("translating", id=seg["id"], zh=zh)
+                    else:
+                        zh = tr.translate(seg["en"], ctx)
                 except CloudError as e:
                     self.emit("warning", text=f"{e}（这句已改用本地翻译）")
                     zh = self._local_translator().translate(seg["en"])

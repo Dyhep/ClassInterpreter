@@ -9,8 +9,8 @@ import sherpa_onnx
 from models import model_path
 
 SR = 16000
-MAX_SEG = 12.0       # seconds; long monologues are cut here
-PREVIEW_EVERY = 1.5  # seconds between live-preview decodes
+MAX_SEG = 7.0        # seconds; long monologues are cut here so captions keep flowing
+PREVIEW_EVERY = 0.6  # seconds between live-preview decodes
 
 
 def make_recognizer(name: str, threads: int):
@@ -36,7 +36,7 @@ def make_vad():
     cfg = sherpa_onnx.VadModelConfig()
     cfg.silero_vad.model = str(model_path("vad"))
     cfg.silero_vad.threshold = 0.5
-    cfg.silero_vad.min_silence_duration = 0.45
+    cfg.silero_vad.min_silence_duration = 0.3
     cfg.silero_vad.min_speech_duration = 0.25
     cfg.silero_vad.max_speech_duration = MAX_SEG
     cfg.sample_rate = SR
@@ -90,6 +90,7 @@ class Recognizer:
         buf = np.zeros(0, dtype=np.float32)
         speech = []          # audio since speech started (for preview)
         last_preview = 0.0
+        preview_gap = PREVIEW_EVERY
         while True:
             item = self.q.get()
             if item is None:
@@ -114,11 +115,14 @@ class Recognizer:
                         self.on_partial("")
             # live preview of the sentence in progress
             if (self.live_preview and speech and self.q.empty()
-                    and time.monotonic() - last_preview > PREVIEW_EVERY):
-                last_preview = time.monotonic()
+                    and time.monotonic() - last_preview > preview_gap):
                 audio = np.concatenate(speech)[-int(MAX_SEG * SR):]
-                if len(audio) > SR * 0.8:
+                if len(audio) > SR * 0.5:
+                    t0 = time.monotonic()
                     self.on_partial(self._decode(audio))
+                    # slow computer -> preview less often so final sentences are never delayed
+                    preview_gap = max(PREVIEW_EVERY, 2.0 * (time.monotonic() - t0))
+                last_preview = time.monotonic()
         # flush
         self.vad.flush()
         while not self.vad.empty():

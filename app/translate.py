@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-from cloud import claude_chat
+from cloud import claude_chat, claude_stream
 from models import model_path
 
 try:
@@ -66,18 +66,35 @@ class LocalTranslator:
 
 
 SYSTEM_TRANSLATE = (
-    "你是课堂同声传译。把用户给出的英文（课堂或会议的语音转写，可能有识别错误）翻译成自然、准确的简体中文。"
-    "专业术语第一次出现时在中文后用括号保留英文原词。只输出译文，不要解释。"
+    "你是专业的课堂/会议同声传译员。用户会给出一句英文语音转写（可能有识别错误，也可能是半句话），"
+    "请翻译成自然、准确、专业的简体中文，符合中国大学课堂的表达习惯。\n"
+    "要求：\n"
+    "1. 结合前文理解意思，遇到明显的识别错误按上下文意思翻译。\n"
+    "2. 专业术语用该学科通用的中文译名，并在第一次出现时用括号附英文原词，例如：需求量（quantity demanded）。\n"
+    "3. 人名、书名、课程代号保留英文。\n"
+    "4. 只输出这一句的译文，不要解释、不要引号、不要翻译前文。"
 )
 
 
 class CloudTranslator:
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, topic: str = ""):
         self.api_key = api_key
         self.model = model
+        self.system = SYSTEM_TRANSLATE + (f"\n当前课程/会议：{topic}" if topic else "")
+
+    def _message(self, text, context):
+        msg = ""
+        if context:
+            msg += "【前文，仅供理解，不要翻译】\n" + "\n".join(context[-4:]) + "\n\n"
+        return msg + "【请翻译这一句】\n" + text
 
     def translate(self, text: str, context=None) -> str:
-        msg = text
-        if context:
-            msg = "（前文，仅供参考，不要翻译）\n" + "\n".join(context[-3:]) + "\n\n（请翻译）\n" + text
-        return claude_chat(self.api_key, self.model, SYSTEM_TRANSLATE, msg, max_tokens=600).strip()
+        return claude_chat(self.api_key, self.model, self.system, self._message(text, context),
+                           max_tokens=600).strip()
+
+    def translate_stream(self, text: str, context=None):
+        """Yields the growing translation."""
+        out = ""
+        for piece in claude_stream(self.api_key, self.model, self.system, self._message(text, context)):
+            out += piece
+            yield out.strip()

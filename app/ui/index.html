@@ -9,12 +9,12 @@
   --bg:#F7F6F2; --panel:#FFFFFF; --ink:#1E1F22; --muted:#6B6E76; --faint:#A3A6AD;
   --line:#E6E3DC; --accent:#0F6E6A; --accent-soft:#E2F0EE; --rec:#D2452F; --rec-soft:#FBE9E5;
   --warn:#9A6B00; --warn-soft:#FFF4D6; --shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06);
-  --zh:20px;
+  --zh:20px; --en-ink:#1E1F22; --zh-ink:#0B5C58;
 }
 @media (prefers-color-scheme: dark){
   :root{--bg:#17181B;--panel:#202226;--ink:#ECEDEF;--muted:#9EA2AA;--faint:#686C74;--line:#2E3036;
   --accent:#4FB3AC;--accent-soft:#1D3533;--rec:#F06B55;--rec-soft:#3A2420;--warn:#E7B94A;--warn-soft:#3A3120;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);}
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);--en-ink:#ECEDEF;--zh-ink:#7FD3CC;}
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
@@ -49,18 +49,23 @@ header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:
 /* main */
 main{flex:1;display:flex;min-height:0}
 #transcript{flex:1;overflow-y:auto;padding:22px 28px 120px;scroll-behavior:smooth}
+.keybar{position:sticky;top:-22px;z-index:2;margin:-22px -28px 14px;padding:10px 28px;background:var(--warn-soft);color:var(--warn);
+  font-size:14px;display:none;align-items:center;gap:10px;flex-wrap:wrap;line-height:1.6}
+.keybar.show{display:flex}
+.keybar .btn{height:30px}
 .empty{max-width:520px;margin:12vh auto 0;text-align:center;color:var(--muted);line-height:1.8}
 .empty h2{color:var(--ink);font-size:22px;margin:0 0 8px}
 .empty ol{text-align:left;display:inline-block;margin:10px 0 0;padding-left:20px}
 .seg{display:grid;grid-template-columns:52px 1fr;gap:4px 12px;padding:10px 0;border-bottom:1px dashed var(--line)}
 .seg .t{color:var(--faint);font-size:12px;padding-top:4px;font-variant-numeric:tabular-nums}
-.seg .en{color:var(--muted);font-size:calc(var(--zh) * .72);line-height:1.5;font-family:"Segoe UI",system-ui,sans-serif}
-.seg .zh{grid-column:2;font-size:var(--zh);line-height:1.6}
+.seg .en{color:var(--en-ink);font-size:calc(var(--zh) * .95);line-height:1.45;font-family:"Segoe UI",system-ui,sans-serif}
+.seg .zh{grid-column:2;font-size:var(--zh);line-height:1.6;color:var(--zh-ink);font-weight:500}
+.seg .zh.live{opacity:.75}
 .seg .zh.pending{color:var(--faint);font-size:14px}
 .mode-zh .seg .en,.mode-en .seg .zh{display:none}
-.mode-en .seg .en{color:var(--ink);font-size:var(--zh)}
+.mode-en .seg .en{font-size:var(--zh)}
 .mode-zh .seg .zh{grid-column:2}
-#partial{display:grid;grid-template-columns:52px 1fr;gap:12px;padding:10px 0;color:var(--faint);font-size:calc(var(--zh) * .72);font-style:italic;font-family:"Segoe UI",system-ui,sans-serif}
+#partial{display:grid;grid-template-columns:52px 1fr;gap:12px;padding:10px 0;color:var(--en-ink);opacity:.6;font-size:calc(var(--zh) * .95);line-height:1.45;font-family:"Segoe UI",system-ui,sans-serif}
 #partial:empty{display:none}
 #partial::before{content:"…";color:var(--accent);font-style:normal}
 #jump{position:absolute;bottom:62px;left:50%;transform:translateX(-50%);display:none;border:none;border-radius:16px;padding:7px 14px;background:var(--ink);color:var(--bg);box-shadow:var(--shadow);font-size:13px}
@@ -154,6 +159,10 @@ footer{display:flex;align-items:center;gap:12px;padding:7px 14px;border-top:1px 
 
 <main style="position:relative">
   <div id="transcript">
+    <div class="keybar" id="keybar">
+      <b>现在是本地翻译，质量一般。</b>填写 Claude API key 后，翻译会变得专业准确，并且边说边出中文（约 $0.15/小时课）。
+      <button class="btn primary" id="keybarGo">去填写</button><button class="ibtn" id="keybarX" title="先不用">✕</button>
+    </div>
     <div class="empty" id="empty">
       <h2>上课时点“开始”就行</h2>
       英文会实时变成文字，下面跟着中文翻译，<br>下课后点“总结”生成课堂笔记。
@@ -209,7 +218,7 @@ footer{display:flex;align-items:center;gap:12px;padding:7px 14px;border-top:1px 
       <div class="sec">
         <h4>Claude API（可选，让翻译和总结更好）</h4>
         <div class="muted" style="line-height:1.7">不填也能用，全部在本机离线运行、免费。填了以后翻译和总结交给 Claude，质量明显更好，大约每小时课 $0.15。
-          在 console.anthropic.com 注册并充值后创建 key。</div>
+          <br>获取方法：打开 console.anthropic.com → 注册登录 → Billing 充值（$5 起）→ API Keys → Create Key，复制 sk-ant- 开头的那串粘贴到下面，点“测试”。</div>
         <div class="row"><input id="apiKey" class="field" style="flex:1;min-width:220px" placeholder="sk-ant-..." autocomplete="off">
           <button class="btn" id="testKey">测试</button></div>
         <div class="muted" id="keyMsg"></div>
@@ -270,7 +279,8 @@ function segHtml(s){
     `<div class="zh${s.zh?"":" pending"}">${s.zh?esc(s.zh):"翻译中…"}</div></div>`;
 }
 function addSeg(s){ $("#empty").style.display="none"; $("#segs").insertAdjacentHTML("beforeend", segHtml(s)); scrollEnd(); }
-function setZh(id, zh){ const el=document.querySelector(`.seg[data-id="${id}"] .zh`); if(el){ el.textContent=zh; el.classList.remove("pending"); } scrollEnd(); }
+function setZh(id, zh, live){ const el=document.querySelector(`.seg[data-id="${id}"] .zh`);
+  if(el){ el.textContent=zh; el.classList.remove("pending"); el.classList.toggle("live", !!live); } scrollEnd(); }
 function showSession(sess){
   $("#segs").innerHTML = sess.segments.map(segHtml).join("");
   $("#empty").style.display = sess.segments.length? "none":"";
@@ -308,6 +318,7 @@ async function pollLoop(){
         case "session": summaryFolder=e.session.folder; break;
         case "final": $("#partial").textContent=""; addSeg(e.seg); break;
         case "partial": $("#partial").textContent=e.text; if(e.text){ $("#empty").style.display="none"; scrollEnd(); } break;
+        case "translating": setZh(e.id, e.zh, true); break;
         case "translated": setZh(e.id, e.zh); break;
         case "status": setStatus(e.text); break;
         case "warning": setStatus(e.text); break;
@@ -397,6 +408,8 @@ function applyView(){
   document.querySelectorAll("#viewMode button").forEach(b=>b.classList.toggle("on", b.dataset.m===S.display_mode));
   document.documentElement.style.setProperty("--zh", (S.font_size||20)+"px");
   const cloud = S.has_api_key && (S.use_cloud_translate || S.use_cloud_summary);
+  let hideBar=false; try{ hideBar = sessionStorage.getItem("keybarX")==="1"; }catch{}
+  $("#keybar").classList.toggle("show", !(S.has_api_key && S.use_cloud_translate) && !hideBar);
   $("#modePill").textContent = cloud? "Claude 已连接" : "本地离线模式"; $("#modePill").className = "pill"+(cloud?" cloud":"");
 }
 document.querySelectorAll("#viewMode button").forEach(b=> b.onclick=()=>save({display_mode:b.dataset.m}));
@@ -431,6 +444,8 @@ async function watchModels(){
 }
 $("#setBtn").onclick=()=>{ fillSettings(); $("#modal").classList.add("show"); $("#scrim").classList.add("show"); };
 $("#setClose").onclick=closeDrawers;
+$("#keybarGo").onclick=()=>{ $("#setBtn").click(); setTimeout(()=>$("#apiKey").focus(),50); };
+$("#keybarX").onclick=()=>{ try{ sessionStorage.setItem("keybarX","1"); }catch{} $("#keybar").classList.remove("show"); };
 $("#testKey").onclick=async ()=>{
   const k=$("#apiKey").value.trim(); if(!k){ await save({api_key:""}); $("#keyMsg").textContent="已清除，使用本地模式"; return; }
   $("#keyMsg").textContent="测试中…"; const err = await api.check_key(k);
