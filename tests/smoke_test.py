@@ -82,6 +82,34 @@ def check_cloud_tiers():
         print(f"  {tier}: {e.usage}")
     assert result["saver"]["requests"] < result["best"]["requests"], "saver tier did not batch"
     assert result["saver"]["in"] < result["best"]["in"], "saver tier did not reduce input"
+    # AI 助教: explain a selection, a follow-up (cached context), web search, and web-search fallback
+    e = engine.Engine()
+    e.settings.update({"api_key": "sk-ant-fake"})
+    s = engine.Session.new(e.settings.sessions_dir(), "tutor")
+    s.segments = [{"id": i, "t": i * 5.0, "en": l, "zh": "译"} for i, l in enumerate(lines * 40)]
+    s.save()
+
+    def ask(mid, **kw):
+        e.ask(str(s.folder), mid=mid, **kw)
+        t0 = time.time()
+        while True:
+            for x in e.events:
+                if x.get("mid") == mid and x["kind"] in ("chat_done", "chat_error"):
+                    return x
+            assert time.time() - t0 < 30, "tutor timed out"
+            time.sleep(0.05)
+    r1 = ask("a", question="", quote="elasticity", quote_t=5)
+    r2 = ask("b", question="follow up")
+    r3 = ask("c", question="search", web=True)
+    fake_claude.H.FAIL_WEB = True
+    r4 = ask("d", question="search again", web=True)
+    fake_claude.H.FAIL_WEB = False
+    for r in (r1, r2, r3, r4):
+        assert r["kind"] == "chat_done", r
+    assert r3["sources"], "web search sources missing"
+    assert r2["usd"] < r1["usd"], "follow-up should be cheaper (cached transcript)"
+    assert len(e.get_chat(str(s.folder))) == 8
+    print(f"  tutor: explain ${r1['usd']}, follow-up ${r2['usd']}, web ${r3['usd']}, fallback ok")
     srv.shutdown()
     cloud.API_URL = "https://api.anthropic.com/v1/messages"
 

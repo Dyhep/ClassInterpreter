@@ -31,7 +31,7 @@ REDUCE_PROMPT = (
 CLOUD_SYSTEM = (
     "你是认真负责的助教。用户会给你一堂课（或一次会议）的英文语音转写，可能有识别错误，请结合上下文理解。"
     "用简体中文写一份清晰的课堂笔记（Markdown）：\n"
-    "## 本节课主题\n## 主要内容（分小标题，条理清楚，可以较详细）\n"
+    "## 本节课主题\n## 主要内容（分小标题，条理清楚，可以较详细；每个要点末尾用 [mm:ss] 标出它在课上出现的时间点，取转写行首的时间）\n"
     "## 重要概念 / 术语（中文 — English，附一句解释）\n"
     "## 作业、考试与截止日期（没有就写“未提及”）\n## 可能考到的点\n## 复习建议"
 )
@@ -184,7 +184,7 @@ class Summarizer:
                 self.chunk_notes[c] = n
 
     def summarize_cloud(self, sentences, api_key, model, progress=lambda p, msg: None, usage=None) -> str:
-        text = " ".join(sentences)
+        text = "\n".join(sentences)
         if not text.strip():
             return "（还没有内容可以总结）"
         progress(0.1, "正在请 Claude 总结…")

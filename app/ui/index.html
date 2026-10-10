@@ -138,6 +138,48 @@ footer{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 1
 .opt b{display:block}
 .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0}
 .switch input{width:38px;height:22px;accent-color:var(--accent)}
+/* ---------- AI 助教 ---------- */
+#selbar{position:fixed;z-index:30;display:none;gap:2px;padding:4px;background:var(--ink);border-radius:10px;box-shadow:var(--shadow)}
+#selbar.show{display:flex}
+#selbar button{border:none;background:transparent;color:var(--bg);font-size:13px;padding:6px 10px;border-radius:7px;white-space:nowrap}
+#selbar button:hover{background:rgba(255,255,255,.14)}
+#selbar button.main{background:var(--accent);color:#fff}
+#chatWin{position:fixed;z-index:25;right:24px;bottom:56px;width:400px;height:520px;min-width:300px;min-height:260px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);display:none;flex-direction:column;resize:both;overflow:hidden}
+#chatWin.show{display:flex}
+#chatWin.min{height:auto!important;min-height:0;resize:none}
+#chatWin.min .chat-body,#chatWin.min .chat-foot{display:none}
+.chat-head{display:flex;align-items:center;gap:6px;padding:9px 10px 9px 14px;border-bottom:1px solid var(--line);cursor:move;user-select:none}
+.chat-head b{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-head .ibtn{height:28px;min-width:28px;padding:0 6px}
+.chat-head label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.chat-body{flex:1;overflow-y:auto;padding:12px 14px;font-size:14.5px;line-height:1.7}
+.chat-hint{color:var(--muted);font-size:13px;line-height:1.8}
+.msg{margin:0 0 14px}
+.msg.user{margin-left:28px;background:var(--accent-soft);border-radius:12px 12px 4px 12px;padding:8px 11px}
+.msg.user .q{white-space:pre-wrap}
+.msg .quote{border-left:3px solid var(--accent);padding:2px 8px;margin:0 0 6px;color:var(--muted);font-size:13px;max-height:5.2em;overflow:hidden}
+.msg.ai h2,.msg.ai h3{font-size:15px;margin:10px 0 4px;color:var(--accent)}
+.msg.ai ul{padding-left:20px;margin:4px 0}.msg.ai p{margin:5px 0}
+.msg .status{color:var(--muted);font-size:12.5px;margin:2px 0 6px}
+.msg .meta{color:var(--faint);font-size:11.5px;margin-top:4px}
+.msg .src{font-size:12.5px;margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}
+.msg .src a{display:block;color:var(--accent);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.msg .err{color:var(--rec)}
+a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding:0 4px;font-variant-numeric:tabular-nums;cursor:pointer;text-decoration:none;font-size:.92em}
+.chat-foot{border-top:1px solid var(--line);padding:8px 10px 10px}
+.chip{display:none;align-items:flex-start;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 8px;margin-bottom:6px;font-size:12.5px;color:var(--muted)}
+.chip.show{display:flex}
+.chip span{flex:1;max-height:3.2em;overflow:hidden}
+.chip button{border:none;background:none;color:var(--faint);padding:0 2px}
+.chat-row{display:flex;gap:6px;align-items:flex-end}
+#chatIn{flex:1;resize:none;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:8px 10px;font:inherit;font-size:14px;line-height:1.5;max-height:120px;min-height:38px}
+#chatSend{height:38px}
+.chat-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.chat-quick button{border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.seg.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%,30%{background:var(--warn-soft)}100%{background:transparent}}
+@media (max-width:760px){#chatWin{left:8px;right:8px;width:auto!important;bottom:8px}}
 #toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;display:none;z-index:20;max-width:80vw;box-shadow:var(--shadow)}
 #toast.err{background:var(--rec);color:#fff}
 @media (max-width:760px){
@@ -162,6 +204,8 @@ footer{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 1
     <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg><span>历史</span></button>
   <button class="ibtn" id="sumBtn" title="课堂总结">
     <svg class="icon" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg><span>总结</span></button>
+  <button class="ibtn" id="aiBtn" title="AI 助教：对这节课提问（也可以选中文字再问）">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4zM9 10h.01M12 10h.01M15 10h.01"/></svg><span>AI 助教</span></button>
   <button class="ibtn" id="topBtn" title="窗口置顶（看网课时用）">
     <svg class="icon" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v7"/></svg></button>
   <button class="ibtn" id="setBtn" title="设置">
@@ -264,6 +308,31 @@ footer{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 1
           <button class="btn" id="chooseDir">更改</button></div>
       </div>
       <div class="sec muted" id="about"></div>
+    </div>
+  </div>
+</div>
+<div id="selbar">
+  <button class="main" data-a="explain">AI 解释</button><button data-a="ask">问 AI…</button>
+  <button data-a="web">网上搜</button><button data-a="copy">复制</button>
+</div>
+<div id="chatWin">
+  <div class="chat-head" id="chatHead">
+    <b id="chatTitle">AI 助教</b>
+    <label title="让 AI 先上网查资料再回答（每次搜索约 $0.01）"><input type="checkbox" id="chatWeb">联网</label>
+    <button class="ibtn" id="chatClear" title="清空这节课的对话">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+    <button class="ibtn" id="chatMin" title="收起 / 展开">—</button>
+    <button class="ibtn" id="chatClose" title="关闭">✕</button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-foot">
+    <div class="chip" id="chatChip"><span id="chipText"></span><button id="chipX" title="不引用这段">✕</button></div>
+    <div class="chat-row">
+      <textarea id="chatIn" rows="1" placeholder="问这节课的任何问题…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <button class="btn primary" id="chatSend">发送</button>
+    </div>
+    <div class="chat-quick" id="chatQuick">
+      <button>这节课的重点是什么？</button><button>哪些地方可能会考？</button><button>帮我出 3 道练习题</button>
     </div>
   </div>
 </div>
@@ -377,6 +446,7 @@ function showSession(sess){
   showLive(false);
   summaryText = sess.summary||""; summaryFolder = sess.folder;
   renderSummary(); scrollEnd(true);
+  if(chatWin.classList.contains("show") && chatFolder!==summaryFolder && !chatBusy) loadChat();
 }
 function scrollEnd(force){ const t=$("#transcript"); if(autoScroll||force){ t.scrollTop=t.scrollHeight; } }
 $("#transcript").addEventListener("scroll", ()=>{ const t=$("#transcript");
@@ -416,7 +486,8 @@ async function pollLoop(){
     for(const e of r.events){
       lastSeq = e.seq;
       switch(e.kind){
-        case "session": summaryFolder=e.session.folder; showCost(null); break;
+        case "session": summaryFolder=e.session.folder; showCost(null);
+          if(chatWin.classList.contains("show") && !chatBusy) loadChat(); break;
         case "final": addSeg(e.seg); break;
         case "partial": setPartial(e.text); break;
         case "translating": setZh(e.id, e.zh, true); break;
@@ -428,6 +499,8 @@ async function pollLoop(){
         case "state": setRecState(e.state); break;
         case "stopped": refreshHistory(); if(e.session && e.session.segments.length) { openSide(); } break;
         case "summary_progress": if(e.folder===summaryFolder) sumProgress(e.p, e.text); break;
+        case "chat_text": case "chat_event": case "chat_done": case "chat_error": onChatEvent(e); break;
+        case "cost_session": if(e.folder===summaryFolder) showCost(e); break;
         case "summary": if(e.folder===summaryFolder){ summaryText=e.text; renderSummary(); } refreshHistory(); break;
       }
     }
@@ -444,7 +517,7 @@ function renderSummary(){
   const body=$("#sumBody");
   const cloud = S.has_api_key && S.use_cloud_summary;
   $("#sumMode").textContent = cloud ? "由 Claude 总结" : "本机 AI 总结";
-  if(summaryText){ body.innerHTML = md(summaryText); $("#makeSum").textContent="重新总结"; }
+  if(summaryText){ body.innerHTML = fmtTs(md(summaryText)); $("#makeSum").textContent="重新总结"; }
   else {
     $("#makeSum").textContent="生成总结";
     let html = `<p class="muted">${recording? "上课中也可以先点一次看看目前的要点。" : "下课后点下面的“生成总结”，会整理出主题、主要内容、术语表、作业和考试提醒。"}</p>`;
@@ -585,6 +658,140 @@ $("#bgSum").onchange=e=>save({background_summary:e.target.checked});
 $("#chooseDir").onclick=async ()=>{ S=await api.choose_sessions_dir(); fillSettings(); };
 $("#recBtn").onclick=toggleRec;
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawers(); });
+
+/* ---------- AI 助教 ---------- */
+let chatFolder="", chatQuote=null, chatBusy=null, chatMsgs={};
+const chatWin=$("#chatWin");
+function fmtTs(text){ return text.replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, (m,t)=>`<a class="ts" data-t="${t}">${t}</a>`); }
+function tsToSec(t){ return t.split(":").map(Number).reduce((a,b)=>a*60+b,0); }
+function jumpTo(t){
+  const target=tsToSec(t); let best=null, bd=1e9;
+  document.querySelectorAll("#segs .seg").forEach(el=>{
+    const d=Math.abs(tsToSec(el.querySelector(".t").textContent)-target); if(d<bd){bd=d;best=el;} });
+  if(!best){ toast("原文里找不到这个时间点"); return; }
+  autoScroll=false; best.scrollIntoView({block:"center", behavior:"smooth"});
+  best.classList.remove("flash"); void best.offsetWidth; best.classList.add("flash");
+}
+document.addEventListener("click", e=>{
+  const a=e.target.closest("a.ts"); if(a){ e.preventDefault(); jumpTo(a.dataset.t); return; }
+  const u=e.target.closest("a[data-url]"); if(u){ e.preventDefault(); api.open_url(u.dataset.url); }
+});
+function chatHtmlUser(m){
+  return `<div class="msg user">${m.quote?`<div class="quote">${esc(m.quote)}</div>`:""}<div class="q">${esc(m.q)}</div></div>`;
+}
+function chatHtmlAi(id, text, sources, usd, status, err){
+  const src = (sources&&sources.length)? `<div class="src">来源：${sources.slice(0,6).map(x=>`<a data-url="${esc(x.url)}" title="${esc(x.url)}">↗ ${esc(x.title||x.url)}</a>`).join("")}</div>` : "";
+  return `<div class="msg ai" id="${id}">${status?`<div class="status">${esc(status)}</div>`:""}`+
+    (err? `<div class="err">${esc(err)}</div>` : `<div class="txt">${text? fmtTs(md(text)) : '<span class="muted">思考中…</span>'}</div>`)+
+    src+(usd!=null?`<div class="meta">本次约 $${usd.toFixed(4)}</div>`:"")+`</div>`;
+}
+function chatScroll(){ const b=$("#chatBody"); b.scrollTop=b.scrollHeight; }
+async function loadChat(){
+  chatFolder=summaryFolder;
+  $("#chatTitle").textContent = "AI 助教" + (chatFolder? " · "+(chatFolder.split(/[\\/]/).pop().replace(/^\d{4}-\d\d-\d\d_\d{6}_/,"")) : "");
+  const hist = chatFolder? await api.get_chat(chatFolder) : [];
+  let html="";
+  for(let i=0;i<hist.length;i++){
+    const h=hist[i];
+    html += h.role==="user"? chatHtmlUser(h) : chatHtmlAi("h"+i, h.text, h.sources, h.usd);
+  }
+  $("#chatBody").innerHTML = html || `<div class="chat-hint">可以直接提问，也可以在原文或总结里<b>选中</b>一个词、一句话，点“AI 解释”或“问 AI”。<br>
+    回答里的 <a class="ts" data-t="0:00">时间点</a> 点一下会跳回原文对应的位置。<br>勾选“联网”会先上网查资料再回答。</div>`;
+  chatScroll();
+}
+async function openChat(){
+  if(!S.has_api_key){ toast("AI 助教需要先在设置里填写 Claude API key", true); return false; }
+  if(!summaryFolder){ toast("先开始一节课，或在“历史”里打开一节课"); return false; }
+  const wasOpen = chatWin.classList.contains("show");
+  chatWin.classList.add("show"); chatWin.classList.remove("min"); $("#aiBtn").classList.add("active");
+  if(!wasOpen || chatFolder!==summaryFolder) await loadChat();   // finish loading before anything is added
+  return true;
+}
+function closeChat(){ chatWin.classList.remove("show"); $("#aiBtn").classList.remove("active"); }
+function setQuote(q){
+  chatQuote=q; $("#chatChip").classList.toggle("show", !!q); $("#chipText").textContent = q? "引用：「"+q.text+"」" : "";
+}
+async function sendChat(question, quote){
+  if(chatBusy){ toast("上一个问题还在回答中"); return; }
+  if(!(await openChat())) return;
+  quote = quote!==undefined? quote : chatQuote;
+  question = (question||"").trim();
+  if(!question && !quote) return;
+  const shown = question || "请解释这段内容";
+  if($("#chatBody .chat-hint")) $("#chatBody").innerHTML="";
+  $("#chatBody").insertAdjacentHTML("beforeend", chatHtmlUser({q:shown, quote: quote&&quote.text}));
+  const mid="m"+Date.now(); chatBusy=mid; chatMsgs[mid]={sources:[], status:""};
+  $("#chatBody").insertAdjacentHTML("beforeend", chatHtmlAi(mid, "", null, null));
+  chatScroll(); $("#chatIn").value=""; autoGrow(); setQuote(null);
+  $("#chatSend").disabled=true;
+  await api.ask(chatFolder, question, quote?quote.text:"", quote?quote.t:null, $("#chatWeb").checked, mid);
+}
+function onChatEvent(e){
+  const st=chatMsgs[e.mid]; const el=document.getElementById(e.mid); if(!st||!el) return;
+  const nearBottom = (()=>{ const b=$("#chatBody"); return b.scrollHeight-b.scrollTop-b.clientHeight<60; })();
+  if(e.kind==="chat_text"){ st.text=e.text; }
+  if(e.kind==="chat_event"){
+    if(e.ev==="search") st.status = "🔍 已搜索：" + (e.data||"");
+    if(e.ev==="web_unavailable") st.status = "联网搜索没有开通，已改为直接回答";
+    if(e.ev==="search_error") st.status = "联网搜索出错，已改为直接回答";
+    if(e.ev==="results"||e.ev==="citation"){ for(const x of (Array.isArray(e.data)?e.data:[e.data])) if(!st.sources.some(y=>y.url===x.url)) st.sources.push(x); }
+  }
+  if(e.kind==="chat_done"){ st.text=e.text; st.sources=e.sources||st.sources; st.usd=e.usd; }
+  if(e.kind==="chat_error"){ st.err=e.text; }
+  el.outerHTML = chatHtmlAi(e.mid, st.text, st.sources, st.usd, st.status, st.err);
+  if(e.kind==="chat_done"||e.kind==="chat_error"){ chatBusy=null; $("#chatSend").disabled=false; }
+  if(nearBottom) chatScroll();
+}
+function autoGrow(){ const t=$("#chatIn"); t.style.height="auto"; t.style.height=Math.min(120,t.scrollHeight)+"px"; }
+$("#chatIn").addEventListener("input", autoGrow);
+$("#chatIn").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); sendChat($("#chatIn").value); } });
+$("#chatSend").onclick=()=>sendChat($("#chatIn").value);
+$("#chipX").onclick=()=>setQuote(null);
+$("#chatQuick").addEventListener("click", e=>{ if(e.target.tagName==="BUTTON") sendChat(e.target.textContent, null); });
+$("#aiBtn").onclick=()=> chatWin.classList.contains("show")? closeChat() : openChat();
+$("#chatClose").onclick=closeChat;
+$("#chatMin").onclick=()=>chatWin.classList.toggle("min");
+$("#chatClear").onclick=async ()=>{ if(chatBusy) return; await api.clear_chat(chatFolder); loadChat(); };
+// drag the window by its header
+(()=>{ const h=$("#chatHead"); let sx,sy,ox,oy,drag=false;
+  h.addEventListener("mousedown", e=>{ if(e.target.closest("button,label,input")) return;
+    drag=true; const r=chatWin.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+    chatWin.style.left=ox+"px"; chatWin.style.top=oy+"px"; chatWin.style.right="auto"; chatWin.style.bottom="auto"; e.preventDefault(); });
+  document.addEventListener("mousemove", e=>{ if(!drag) return;
+    const x=Math.min(Math.max(0, ox+e.clientX-sx), innerWidth-80), y=Math.min(Math.max(0, oy+e.clientY-sy), innerHeight-40);
+    chatWin.style.left=x+"px"; chatWin.style.top=y+"px"; });
+  document.addEventListener("mouseup", ()=>drag=false);
+})();
+// selection toolbar
+let selInfo=null;
+function hideSel(){ $("#selbar").classList.remove("show"); }
+document.addEventListener("mouseup", e=>{
+  if(e.target.closest("#selbar")) return;
+  setTimeout(()=>{
+    const sel=getSelection(); const text=(sel? sel.toString():"").replace(/\s+/g," ").trim();
+    if(!text || text.length>1200 || !sel.rangeCount){ hideSel(); return; }
+    const node=sel.anchorNode && (sel.anchorNode.nodeType===1? sel.anchorNode : sel.anchorNode.parentElement);
+    if(!node || !node.closest("#transcript, #sumBody, #chatBody")){ hideSel(); return; }
+    const seg=node.closest(".seg");
+    selInfo={text, t: seg? tsToSec(seg.querySelector(".t").textContent) : null};
+    const r=sel.getRangeAt(0).getBoundingClientRect(), bar=$("#selbar");
+    bar.classList.add("show");
+    const bw=bar.offsetWidth, bh=bar.offsetHeight;
+    let x=Math.min(Math.max(8, r.left + r.width/2 - bw/2), innerWidth-bw-8);
+    let y=r.top - bh - 8; if(y<8) y=r.bottom+8;
+    bar.style.left=x+"px"; bar.style.top=y+"px";
+  }, 0);
+});
+document.addEventListener("mousedown", e=>{ if(!e.target.closest("#selbar")) hideSel(); });
+document.addEventListener("scroll", hideSel, true);
+$("#selbar").addEventListener("click", async e=>{
+  const a=e.target.dataset.a; if(!a || !selInfo) return;
+  const info=selInfo; hideSel(); getSelection().removeAllRanges();
+  if(a==="explain") sendChat("", info);
+  if(a==="ask"){ if(await openChat()){ setQuote(info); $("#chatIn").focus(); } }
+  if(a==="web") api.open_url("https://www.google.com/search?q="+encodeURIComponent(info.text));
+  if(a==="copy"){ try{ await navigator.clipboard.writeText(info.text); }catch{ const t=document.createElement("textarea"); t.value=info.text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } toast("已复制"); }
+});
 
 /* ---------- boot ---------- */
 async function boot(){

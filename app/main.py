@@ -71,6 +71,22 @@ class Api:
     def summarize(self, folder=""):
         return self._e.summarize(folder)
 
+    # ---- AI 助教 ----
+    def get_chat(self, folder=""):
+        return self._e.get_chat(folder)
+
+    def clear_chat(self, folder=""):
+        return self._e.clear_chat(folder)
+
+    def ask(self, folder, question, quote="", quote_t=None, web=False, mid=""):
+        return self._e.ask(folder, question, quote, quote_t, web, mid)
+
+    def open_url(self, url):
+        import webbrowser
+        if str(url).startswith(("https://", "http://")):
+            webbrowser.open(url)
+        return True
+
     # ---- history ----
     def sessions(self):
         return self._e.list_sessions()

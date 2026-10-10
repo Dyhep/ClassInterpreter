@@ -15,13 +15,38 @@ def fake_zh(en):
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
+    CACHE = set()
+    FAIL_WEB = False   # simulate "web search not enabled" (HTTP 400)
+
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["content-length"])))
-        user = req["messages"][0]["content"]; system = req.get("system", "")
-        tin = ntok(system) + ntok(user) + 8
+        system = req.get("system", "")
+        cached_tok = cw = cr = 0
+        if isinstance(system, list):
+            for b in system:
+                if b.get("cache_control"):
+                    t = ntok(b["text"])
+                    key = hash(b["text"])
+                    if key in H.CACHE: cr += t
+                    else: H.CACHE.add(key); cw += t
+                    cached_tok += t
+            system = "\n".join(b["text"] for b in system)
+        msgs = req["messages"]; user = msgs[-1]["content"]
+        history_tok = sum(ntok(m["content"]) for m in msgs[:-1])
+        tin = ntok(system) - cached_tok + ntok(user) + history_tok + 8
+        tools = req.get("tools") or []
+        web = any(t.get("type", "").startswith("web_search") for t in tools)
+        if web and H.FAIL_WEB:
+            b = json.dumps({"type": "error", "error": {"type": "invalid_request_error",
+                            "message": "web search is not enabled"}}).encode()
+            self.send_response(400); self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
+        chat = isinstance(req.get("system"), list)
         body = user.split("【请翻译这一句】")[-1] if "【请翻译这一句】" in user else user
         lines = [l for l in body.split("\n") if re.match(r"^\d+\.\s", l)]
-        if lines:
+        if chat:
+            out = f"这是第{len(msgs)//2+1}轮回答：课上在 [00:05] 讲到了这一点。" + ("（参考了网上资料）" if web else "")
+        elif lines:
             out = "\n".join(f"{l.split('.',1)[0]}. {fake_zh(l.split('.',1)[1])}" for l in lines)
         else:
             out = fake_zh(body.strip())
@@ -35,11 +60,33 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("content-type", "text/event-stream"); self.end_headers()
         def ev(e, d): self.wfile.write(f"event: {e}\ndata: {json.dumps(d, ensure_ascii=False)}\n\n".encode()); self.wfile.flush()
         time.sleep(FIRST_TOKEN)
-        ev("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": tin, "output_tokens": 1}}})
+        ev("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": tin, "output_tokens": 1,
+            "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr}}})
+        idx = 0
+        if web:
+            ev("content_block_start", {"type": "content_block_start", "index": idx,
+                "content_block": {"type": "server_tool_use", "id": "srv_1", "name": "web_search", "input": {}}})
+            ev("content_block_delta", {"type": "content_block_delta", "index": idx,
+                "delta": {"type": "input_json_delta", "partial_json": '{"query": "price elas'}})
+            ev("content_block_delta", {"type": "content_block_delta", "index": idx,
+                "delta": {"type": "input_json_delta", "partial_json": 'ticity definition"}'}})
+            ev("content_block_stop", {"type": "content_block_stop", "index": idx}); idx += 1
+            ev("content_block_start", {"type": "content_block_start", "index": idx, "content_block": {
+                "type": "web_search_tool_result", "tool_use_id": "srv_1", "content": [
+                    {"type": "web_search_result", "title": "Price elasticity of demand", "url": "https://en.wikipedia.org/wiki/Price_elasticity_of_demand", "encrypted_content": "x"},
+                    {"type": "web_search_result", "title": "Elasticity - Khan Academy", "url": "https://www.khanacademy.org/economics", "encrypted_content": "y"}]}})
+            ev("content_block_stop", {"type": "content_block_stop", "index": idx}); idx += 1
+        ev("content_block_start", {"type": "content_block_start", "index": idx, "content_block": {"type": "text", "text": ""}})
+        if web:
+            ev("content_block_delta", {"type": "content_block_delta", "index": idx, "delta": {"type": "citations_delta",
+                "citation": {"type": "web_search_result_location", "url": "https://en.wikipedia.org/wiki/Price_elasticity_of_demand", "title": "Price elasticity of demand", "cited_text": "..."}}})
         for i in range(0, len(out), 6):
-            ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": out[i:i+6]}})
+            ev("content_block_delta", {"type": "content_block_delta", "index": idx, "delta": {"type": "text_delta", "text": out[i:i+6]}})
             time.sleep(min(6, len(out) - i) / TOK_PER_S)
-        ev("message_delta", {"type": "message_delta", "usage": {"output_tokens": tout}})
+        ev("content_block_stop", {"type": "content_block_stop", "index": idx})
+        u = {"output_tokens": tout}
+        if web: u["server_tool_use"] = {"web_search_requests": 1}
+        ev("message_delta", {"type": "message_delta", "usage": u})
         ev("message_stop", {"type": "message_stop"})
 
 if __name__ == "__main__":

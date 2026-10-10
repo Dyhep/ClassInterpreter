@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from audio import Capture
-from cloud import CloudError, cost_usd
+from cloud import CloudError, cost_usd, usage_usd
 from config import Settings
 from models import Download, MODELS, is_installed
 from summarize import Summarizer
@@ -322,14 +322,32 @@ class Engine:
         if not u:
             return
         with self.usage_lock:
-            self.usage["in"] += u.get("in", 0)
-            self.usage["out"] += u.get("out", 0)
-            self.usage["requests"] += 1
+            for k in ("in", "out", "cw", "cr", "searches"):
+                self.usage[k] = self.usage.get(k, 0) + u.get(k, 0)
+            self.usage["requests"] = self.usage.get("requests", 0) + 1
             d = dict(self.usage)
-        d["usd"] = round(cost_usd(self.settings.get("cloud_model"), d["in"], d["out"]), 4)
+        d["usd"] = round(usage_usd(self.settings.get("cloud_model"), d), 4)
         if self.session:
             self.session.usage = d
         self.emit("cost", **d)
+
+    def _charge(self, session, u):
+        """Add an API call's usage to `session` (the live one or one opened from history)."""
+        if not u:
+            return
+        if self.session is not None and session.folder == self.session.folder:
+            self._add_usage(u)
+            if self.session is not session:
+                session.usage = dict(self.session.usage)
+            return
+        su = dict(session.usage or {})
+        for k in ("in", "out", "cw", "cr", "searches"):
+            su[k] = su.get(k, 0) + u.get(k, 0)
+        su["requests"] = su.get("requests", 0) + 1
+        su["usd"] = round(usage_usd(self.settings.get("cloud_model"), su), 4)
+        session.usage = su
+        session.save()
+        self.emit("cost_session", folder=str(session.folder), **su)
 
     def _translator(self):
         key = self.settings.get("api_key")
@@ -462,17 +480,10 @@ class Engine:
             if self._use_cloud_summary():
                 try:
                     u = {}
-                    out = self.summarizer.summarize_cloud(sentences, self.settings.get("api_key"),
+                    stamped = [f"[{int(x['t']) // 60:02d}:{int(x['t']) % 60:02d}] {x['en']}" for x in session.segments]
+                    out = self.summarizer.summarize_cloud(stamped, self.settings.get("api_key"),
                                                           self.settings.get("cloud_model"), progress, usage=u)
-                    if self.session and session.folder == self.session.folder:
-                        self._add_usage(u)
-                    else:
-                        su = session.usage or {"in": 0, "out": 0, "requests": 0}
-                        su["in"] = su.get("in", 0) + u.get("in", 0)
-                        su["out"] = su.get("out", 0) + u.get("out", 0)
-                        su["requests"] = su.get("requests", 0) + 1
-                        su["usd"] = round(cost_usd(self.settings.get("cloud_model"), su["in"], su["out"]), 4)
-                        session.usage = su
+                    self._charge(session, u)
                 except CloudError as e:
                     self.emit("warning", text=f"{e}（改用本地总结）")
                     out = self._local_summary(sentences, progress)
@@ -496,6 +507,72 @@ class Engine:
             raise RuntimeError("本地总结模型还没下载（设置 → 本地 AI 总结模型），或在设置里填写 Claude API key")
         threads = 2 if self.recording else max(2, self.settings.threads())
         return self.summarizer.summarize_local(sentences, threads, progress)
+
+    # ---------- AI 助教 ----------
+    def _session_for(self, folder):
+        if self.session is not None and (not folder or Path(folder) == self.session.folder):
+            return self.session
+        return Session.load(Path(folder)) if folder else None
+
+    def get_chat(self, folder=""):
+        import assistant
+        s = self._session_for(folder)
+        return assistant.load_chat(s) if s else []
+
+    def clear_chat(self, folder=""):
+        import assistant
+        s = self._session_for(folder)
+        if s:
+            assistant.save_chat(s, [])
+        return True
+
+    def ask(self, folder, question, quote="", quote_t=None, web=False, mid=""):
+        """Runs in the background; streams events chat_text / chat_event / chat_done / chat_error."""
+        threading.Thread(target=self._ask, args=(folder, question, quote, quote_t, web, mid),
+                         daemon=True).start()
+        return True
+
+    def _ask(self, folder, question, quote, quote_t, web, mid):
+        import assistant
+        key = self.settings.get("api_key")
+        if not key:
+            self.emit("chat_error", mid=mid, text="AI 助教需要先在设置里填写 Claude API key")
+            return
+        session = self._session_for(folder)
+        if session is None or not session.segments:
+            self.emit("chat_error", mid=mid, text="这节课还没有内容可以问")
+            return
+        question = (question or "").strip() or assistant.EXPLAIN
+        history = assistant.load_chat(session)
+        usage = {}
+        last = [0.0]
+
+        def on_text(t):
+            if time.monotonic() - last[0] > 0.08:
+                last[0] = time.monotonic()
+                self.emit("chat_text", mid=mid, text=t)
+
+        def on_event(kind, data):
+            self.emit("chat_event", mid=mid, ev=kind, data=data)
+
+        try:
+            answer, sources, web_used = assistant.ask(
+                key, self.settings.get("cloud_model"), session, history, question, quote, quote_t, web,
+                on_text=on_text, on_event=on_event, usage=usage)
+        except CloudError as e:
+            self.emit("chat_error", mid=mid, text=str(e))
+            return
+        except Exception as e:
+            self.emit("chat_error", mid=mid, text=f"出错了：{e}")
+            return
+        finally:
+            self._charge(session, usage)
+        history += [{"role": "user", "q": question, "quote": quote, "quote_t": quote_t, "web": web_used},
+                    {"role": "assistant", "text": answer, "sources": sources,
+                     "usd": round(usage_usd(self.settings.get("cloud_model"), usage), 4)}]
+        assistant.save_chat(session, history)
+        self.emit("chat_done", mid=mid, text=answer, sources=sources,
+                  usd=round(usage_usd(self.settings.get("cloud_model"), usage), 4))
 
     # ---------- history ----------
     def list_sessions(self):
