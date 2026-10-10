@@ -38,8 +38,15 @@ def model_path(name: str):
     return None
 
 
+REQUIRED = {"parakeet": "tokens.txt", "moonshine": "tokens.txt"}
+
+
 def is_installed(name: str) -> bool:
-    return model_path(name) is not None
+    p = model_path(name)
+    if p is None:
+        return False
+    need = REQUIRED.get(name)
+    return (p / need).exists() if need and p.is_dir() else True
 
 
 class Download:
@@ -74,9 +81,17 @@ class Download:
                         if total:
                             self.progress = got / total * (0.9 if url.endswith(".tar.bz2") else 1.0)
                 if url.endswith(".tar.bz2"):
+                    # unpack next to the target and rename only when complete, so a half-unpacked
+                    # folder is never mistaken for an installed model
+                    staging = dest_dir / (folder + ".unpack")
+                    shutil.rmtree(staging, ignore_errors=True)
                     with tarfile.open(tmp, "r:bz2") as t:
-                        t.extractall(dest_dir, filter="data")
+                        t.extractall(staging, filter="data")
                     tmp.unlink()
+                    inner = staging / folder
+                    shutil.rmtree(dest_dir / folder, ignore_errors=True)
+                    (inner if inner.exists() else staging).rename(dest_dir / folder)
+                    shutil.rmtree(staging, ignore_errors=True)
                 else:
                     shutil.move(str(tmp), str(dest_dir / folder))
                 self.progress = 1.0

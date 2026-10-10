@@ -37,7 +37,7 @@ def check_translate():
 
 def check_pipeline(wav):
     e = engine.Engine()
-    e.settings.update({"api_key": ""})
+    e.settings.update({"api_key": "", "asr_choice": "moonshine"})  # don't download 630 MB in CI
     e.start("file:" + wav + "?speed=8", "smoke")
     t0 = time.time()
     while not any(ev["kind"] == "stopped" for ev in e.events):  # file sources stop by themselves
