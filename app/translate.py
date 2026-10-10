@@ -105,7 +105,7 @@ class CloudTranslator:
 # Replies where the model talked to us instead of translating ("请提供要翻译的内容…")
 _META = re.compile(r"请提供|请粘贴|请发送|准备好接收|我准备好|我将(逐句|为您|帮您)|按照您的要求|需要翻译的(内容|文本)|"
                    r"没有(提供|给出)|未提供|编号的英文|您(提供|发送)的|作为(一名|您的)?(翻译|同传)|<\/?原文>")
-_CJK = re.compile(r"[\u4e00-\u9fff]")
+_HAS_CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 def looks_bad(zh: str, en: str) -> bool:
@@ -116,7 +116,7 @@ def looks_bad(zh: str, en: str) -> bool:
     if _META.search(zh):
         return True
     words = max(1, len(en.split()))
-    if not _CJK.search(zh) and words > 3:
+    if not _HAS_CJK.search(zh) and words > 3:
         return True
     # a translation is roughly 1–3 Chinese characters per English word; far longer = it said something else
     return len(zh) > 5 * words + 40
