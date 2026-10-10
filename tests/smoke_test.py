@@ -82,6 +82,19 @@ def check_cloud_tiers():
         result[tier] = dict(e.usage)
         print(f"  {tier}: {e.usage}")
     assert result["saver"]["requests"] < result["best"]["requests"], "saver tier did not batch"
+    # the model "talks back" instead of translating -> must be retried, never shown as a translation
+    fake_claude.H.META_REPLY = True
+    e = engine.Engine()
+    e.settings.update({"api_key": "sk-ant-fake", "use_cloud_translate": True, "translate_tier": "saver"})
+    e.session = engine.Session.new(e.settings.sessions_dir(), "meta")
+    e.recording = True
+    e._on_final("Different options for which coding agents to use and how to orchestrate them together.", 0.0)
+    e._flush_batch()
+    e.tr_q.join()
+    fake_claude.H.META_REPLY = False
+    zh = e.session.segments[0]["zh"]
+    assert "请提供" not in zh and "准备好" not in zh and zh, f"meta reply leaked: {zh}"
+    print(f"  meta reply caught and retried -> {zh[:20]}")
     assert result["saver"]["in"] < result["best"]["in"], "saver tier did not reduce input"
     # AI 助教: explain a selection, a follow-up (cached context), web search, and web-search fallback
     e = engine.Engine()

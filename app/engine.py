@@ -478,7 +478,30 @@ class Engine:
             zh = self._local_translator().translate(seg["en"])
         finally:
             self._add_usage(usage)
-        self._finish(seg, zh)
+        self._finish(seg, self._checked(seg, zh, ctx))
+
+    def _checked(self, seg, zh, ctx):
+        """If the reply isn't a real translation (missing, or the model talked instead), retry once
+        on its own, then fall back to the offline translator."""
+        from translate import CloudTranslator, looks_bad
+        if not looks_bad(zh, seg["en"]):
+            return zh
+        if self._cloud_tr():
+            u = {}
+            try:
+                tr = CloudTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"),
+                                     self.session.title if self.session else "")
+                zh2 = tr.translate(seg["en"], ctx, usage=u)
+                if not looks_bad(zh2, seg["en"]):
+                    return zh2
+            except CloudError:
+                pass
+            finally:
+                self._add_usage(u)
+        try:
+            return self._local_translator().translate(seg["en"])
+        except Exception:
+            return zh if zh and not looks_bad(zh, seg["en"]) else "（翻译失败）"
 
     def _translate_batch(self, segs):
         from translate import BatchTranslator
@@ -497,10 +520,7 @@ class Engine:
         finally:
             self._add_usage(usage)
         for i, seg in enumerate(segs):
-            zh = got.get(i, "")
-            if not zh:
-                zh = self._local_translator().translate(seg["en"])
-            self._finish(seg, zh)
+            self._finish(seg, self._checked(seg, got.get(i, ""), ctx))
 
     def _autosave_loop(self):
         while True:
