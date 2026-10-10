@@ -72,13 +72,18 @@ main{flex:1;display:flex;min-height:0}
   font-size:calc(var(--zh) * .95);line-height:1.45;font-family:"Segoe UI",system-ui,sans-serif;min-height:calc(var(--zh) * .95 * 1.45 + 20px)}
 #partial.on{display:grid}
 #partial .t{color:var(--accent);font-size:12px;padding-top:4px}
-#ptext{opacity:.82}
-#ptext::after{content:"";display:inline-block;width:2px;height:1em;margin-left:1px;vertical-align:-.15em;background:var(--accent);animation:caret 1.1s steps(2,start) infinite}
-@keyframes caret{to{visibility:hidden}}
-#ptext .w.new{animation:wIn .26s ease-out both}
-@keyframes wIn{from{opacity:0;filter:blur(1.5px)}to{opacity:1;filter:none}}
-.mode-zh #partial{display:none}
-@media (prefers-reduced-motion: reduce){#ptext .w.new{animation:none}#flow{transition:none!important}}
+#ptext .w,.seg .en .w{transition:color .6s ease}
+.w.new{animation:wIn .45s ease-out both}
+@keyframes wIn{from{opacity:0}to{opacity:1}}
+.w.swap{animation:wSwap 1.1s ease-out}
+@keyframes wSwap{from{color:var(--accent)}to{color:inherit}}
+#pdots{display:inline-flex;gap:3px;margin-left:2px;vertical-align:middle;opacity:0;transition:opacity .4s ease}
+#pdots.on{opacity:1}
+#pdots i{width:4px;height:4px;border-radius:50%;background:var(--faint);animation:breathe 1.8s ease-in-out infinite}
+#pdots i:nth-child(2){animation-delay:.3s}#pdots i:nth-child(3){animation-delay:.6s}
+@keyframes breathe{0%,100%{opacity:.25}50%{opacity:.75}}
+.seg .zh{transition:opacity .45s ease}
+@media (prefers-reduced-motion: reduce){.w.new,.w.swap,#pdots i{animation:none}#flow{transition:none!important}}
 #jump{position:absolute;bottom:62px;left:50%;transform:translateX(-50%);display:none;border:none;border-radius:16px;padding:7px 14px;background:var(--ink);color:var(--bg);box-shadow:var(--shadow);font-size:13px}
 
 /* summary panel */
@@ -256,7 +261,7 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
     </div>
     <div id="flow">
       <div id="segs"></div>
-      <div id="partial"><div class="t">●</div><div id="ptext"></div></div>
+      <div id="partial"><div class="t">●</div><div><span id="ptext"></span><span id="pdots"><i></i><i></i><i></i></span></div></div>
     </div>
   </div>
   <button id="jump">↓ 回到最新</button>
@@ -418,8 +423,15 @@ function addSeg(s){
   glide(()=>{
     if(prev) prev.classList.remove("latest");
     $("#segs").insertAdjacentHTML("beforeend", segHtml(s));
-    const el=lastSeg(); el.classList.add("latest"); reserveZh(el);
-    setPartial("", true);
+    const el=lastSeg(); el.classList.add("latest");
+    if(hadLive){
+      // keep the very same words on screen: move them into the sentence, then quietly fix any that changed
+      const en=el.querySelector(".en"); en.textContent="";
+      for(const sp of [...$("#ptext").children]){ sp.classList.remove("new"); en.appendChild(sp); }
+      reconcile(en, s.en.split(/\s+/).filter(Boolean), false);
+    }
+    reserveZh(el);
+    resetLive();
   }, anchor);
 }
 function setZh(id, zh, live){
@@ -428,26 +440,72 @@ function setZh(id, zh, live){
   glide(()=>{ el.textContent=zh; el.classList.remove("pending"); el.classList.toggle("live", !!live); },
         () => $("#partial").offsetParent!==null ? $("#partial") : lastSeg());
 }
-let pWords=[];
+/* Live line. Speech recognition revises its guess every ~0.6 s. To keep the eyes calm:
+   - a word is shown only once two guesses in a row agree on it (the unsure tail is a soft "···");
+   - a shown word that later changes is updated in place with a gentle colour fade, never removed and re-added;
+   - when the sentence is final, the same word elements stay on screen (see addSeg). */
+let lastHyp=[];
 const norm=w=>w.toLowerCase().replace(/[^a-z0-9']/g,"");
+function align(a, b){
+  // word-level alignment (longest common subsequence) -> [[i|-1, j|-1], ...]
+  const n=a.length, m=b.length, d=Array.from({length:n+1},()=>new Int16Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) d[i][j] = a[i]===b[j]? d[i+1][j+1]+1 : Math.max(d[i+1][j], d[i][j+1]);
+  const out=[]; let i=0, j=0;
+  while(i<n || j<m){
+    if(i<n && j<m && a[i]===b[j]){ out.push([i++, j++]); }
+    else if(j<m && (i>=n || d[i][j+1]>=d[i+1][j])){ out.push([-1, j++]); }
+    else { out.push([i++, -1]); }
+  }
+  return out;
+}
+function swapWord(sp, w, now){
+  // live line: only correct a shown word once two guesses in a row agree (stops big→bigger→big flicker)
+  if(!now && sp.dataset.pend!==norm(w)){ sp.dataset.pend=norm(w); return; }
+  delete sp.dataset.pend;
+  sp.textContent=w+" "; sp.classList.remove("swap","new"); void sp.offsetWidth; sp.classList.add("swap");
+}
+function reconcile(box, words, animateNew){
+  const spans=[...box.querySelectorAll("span.w")];
+  const ops=align(spans.map(x=>norm(x.textContent)), words.map(norm));
+  const want=[], drop=[];
+  for(let k=0;k<ops.length;k++){
+    const [i,j]=ops[k];
+    if(i>=0 && j>=0){ const sp=spans[i]; delete sp.dataset.pend; if(sp.textContent!==words[j]+" ") sp.textContent=words[j]+" "; want.push(sp); }
+    else if(i>=0 && k+1<ops.length && ops[k+1][0]<0 && ops[k+1][1]>=0){
+      // a word replaced by another: change it in place with a gentle colour fade
+      const sp=spans[i], jj=ops[++k][1]; swapWord(sp, words[jj], !animateNew); want.push(sp);
+    }
+    else if(j>=0 && k+1<ops.length && ops[k+1][1]<0 && ops[k+1][0]>=0){
+      const sp=spans[ops[++k][0]]; swapWord(sp, words[j], !animateNew); want.push(sp);
+    }
+    else if(i>=0){ drop.push(spans[i]); }
+    else {
+      const sp=document.createElement("span"); sp.className="w"+(animateNew?" new":""); sp.textContent=words[j]+" ";
+      want.push(sp);
+    }
+  }
+  drop.forEach(x=>x.remove());
+  let delay=0;
+  want.forEach((sp,k)=>{
+    if(box.children[k]!==sp) box.insertBefore(sp, box.children[k]||null);
+    if(sp.classList.contains("new") && !sp.dataset.seen){ sp.dataset.seen="1"; sp.style.animationDelay=(delay+=90)-90+"ms"; }
+  });
+}
+function resetLive(){ $("#ptext").innerHTML=""; lastHyp=[]; $("#pdots").classList.remove("on"); }
 function setPartial(text, silent){
   const box=$("#ptext");
-  const words = (text||"").split(/\s+/).filter(Boolean);
-  const apply = () => {
-    let k=0; while(k<pWords.length && k<words.length && norm(pWords[k])===norm(words[k])) k++;
-    const spans=[...box.querySelectorAll("span.w")];
-    for(let i=spans.length-1;i>=k;i--) spans[i].remove();
-    for(let i=0;i<k;i++){ if(spans[i] && spans[i].textContent!==words[i]+" "){ spans[i].textContent=words[i]+" "; } }
-    const add=words.slice(k), step=Math.min(110, 520/Math.max(1, add.length));
-    add.forEach((w,i)=>{ const sp=document.createElement("span"); sp.className="w new";
-      sp.style.animationDelay=Math.round(i*step)+"ms"; sp.textContent=w+" "; box.appendChild(sp); });
-    pWords=words;
-  };
-  if(silent){ apply(); return; }
-  if(words.length) $("#empty").style.display="none";
-  glide(apply, lastSeg);
+  const words=(text||"").split(/\s+/).filter(Boolean);
+  if(!words.length){ if(silent) resetLive(); else glide(resetLive, lastSeg); return; }
+  let agree=0; while(agree<lastHyp.length && agree<words.length && norm(lastHyp[agree])===norm(words[agree])) agree++;
+  if(!lastHyp.length) agree=Math.max(0, words.length-2);          // first guess: hold back the last two words
+  lastHyp=words;
+  const shown=box.querySelectorAll("span.w").length;
+  const n=Math.min(words.length, Math.max(agree, shown));          // never take back words already shown
+  const apply=()=>{ reconcile(box, words.slice(0,n), true); $("#pdots").classList.add("on"); };
+  $("#empty").style.display="none";
+  if(silent) apply(); else glide(apply, lastSeg);
 }
-function showLive(on){ $("#partial").classList.toggle("on", !!on); if(!on){ $("#ptext").innerHTML=""; pWords=[]; } }
+function showLive(on){ $("#partial").classList.toggle("on", !!on); if(!on) resetLive(); }
 let curMeta=null, rrBusy=false;
 function renderRR(){
   const b=$("#rrBtn"); if(!b) return;

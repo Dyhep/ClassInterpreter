@@ -6,7 +6,7 @@ from pathlib import Path
 
 APP_NAME = "ClassInterpreter"
 APP_TITLE = "课堂同传"
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 
 
 def resource_dir() -> Path:
