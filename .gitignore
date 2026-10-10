@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+dist/
+dist_assets/
+ci_cache/
+release/
+build/ClassInterpreter/
+*.spec.bak
