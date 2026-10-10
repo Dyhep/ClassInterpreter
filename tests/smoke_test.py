@@ -2,6 +2,7 @@
 
 Env: CI_MODELS_DIR (models folder), LLAMA_SERVER (optional exe), TEST_WAV, SUMMARY=1 to test summary.
 """
+import json
 import os
 import re
 import sys
@@ -89,8 +90,14 @@ def check_cloud_tiers():
     s.segments = [{"id": i, "t": i * 5.0, "en": l, "zh": "译"} for i, l in enumerate(lines * 40)]
     s.save()
 
-    def ask(mid, **kw):
-        e.ask(str(s.folder), mid=mid, **kw)
+    # an old v0.4 conversation is migrated into a general thread
+    (s.folder / "chat.json").write_text(json.dumps([{"role": "user", "q": "old q"},
+                                                   {"role": "assistant", "text": "old a"}]), encoding="utf-8")
+    assert len(e.notes_list(str(s.folder))) == 1, "chat.json not migrated"
+    folder = str(s.folder)
+
+    def ask(tid, mid, **kw):
+        e.ask(folder, tid, mid=mid, **kw)
         t0 = time.time()
         while True:
             for x in e.events:
@@ -98,18 +105,32 @@ def check_cloud_tiers():
                     return x
             assert time.time() - t0 < 30, "tutor timed out"
             time.sleep(0.05)
-    r1 = ask("a", question="", quote="elasticity", quote_t=5)
-    r2 = ask("b", question="follow up")
-    r3 = ask("c", question="search", web=True)
+    t = e.note_new(folder, {"where": "transcript", "text": "elasticity", "seg_id": 1, "t": 5})
+    r1 = ask(t["id"], "a", question="")
+    r2 = ask(t["id"], "b", question="follow up")
+    r3 = ask(t["id"], "c", question="search", web=True)
     fake_claude.H.FAIL_WEB = True
-    r4 = ask("d", question="search again", web=True)
+    r4 = ask(t["id"], "d", question="search again", web=True)
     fake_claude.H.FAIL_WEB = False
     for r in (r1, r2, r3, r4):
         assert r["kind"] == "chat_done", r
     assert r3["sources"], "web search sources missing"
     assert r2["usd"] < r1["usd"], "follow-up should be cheaper (cached transcript)"
-    assert len(e.get_chat(str(s.folder))) == 8
-    print(f"  tutor: explain ${r1['usd']}, follow-up ${r2['usd']}, web ${r3['usd']}, fallback ok")
+    e.note_keep(folder, t["id"], 1, False)
+    e.note_update(folder, t["id"], {"saved": True})
+    t0 = time.time()
+    while not any(x["kind"] == "note_key" for x in e.events):
+        assert time.time() - t0 < 20, "key point not generated"
+        time.sleep(0.05)
+    th = [x for x in e.notes_list(folder) if x["id"] == t["id"]][0]
+    assert th["saved"] and th["key"] and len(th["turns"]) == 4 and th["turns"][1]["keep"] is False
+    md = (s.folder / "笔记.md").read_text(encoding="utf-8")
+    assert "follow up" not in md and "search again" in md, "unkept turn should not be exported"
+    gone = e.note_delete(folder, t["id"])
+    assert len(e.notes_list(folder)) == 1
+    e.note_restore(folder, gone)
+    assert len(e.notes_list(folder)) == 2
+    print(f"  notes: explain ${r1['usd']}, follow-up ${r2['usd']}, web ${r3['usd']}, key「{th['key']}」")
     srv.shutdown()
     cloud.API_URL = "https://api.anthropic.com/v1/messages"
 

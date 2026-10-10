@@ -514,65 +514,161 @@ class Engine:
             return self.session
         return Session.load(Path(folder)) if folder else None
 
-    def get_chat(self, folder=""):
-        import assistant
+    def _folder(self, folder):
         s = self._session_for(folder)
-        return assistant.load_chat(s) if s else []
+        return (str(s.folder), s) if s else (None, None)
 
-    def clear_chat(self, folder=""):
-        import assistant
-        s = self._session_for(folder)
-        if s:
-            assistant.save_chat(s, [])
+    def notes_list(self, folder=""):
+        import notes
+        f, _ = self._folder(folder)
+        return notes.load(f) if f else []
+
+    def note_new(self, folder, anchor):
+        import notes
+        f, _ = self._folder(folder)
+        if not f:
+            return None
+        notes.load(f)  # migrates old chat.json if needed
+        t = notes.new_thread(anchor)
+        notes.mutate(f, lambda ts: ts.append(t))
+        return t
+
+    def note_update(self, folder, tid, fields):
+        import notes
+        f, _ = self._folder(folder)
+        allowed = {k: v for k, v in (fields or {}).items() if k in ("saved", "key", "title")}
+
+        def fn(ts):
+            t = notes.find(ts, tid)
+            if t:
+                t.update(allowed)
+            return t
+        t = notes.mutate(f, fn)
+        if t and allowed.get("saved") and not t.get("key"):
+            self.note_keypoint(folder, tid)
+        return t
+
+    def note_keep(self, folder, tid, idx, keep):
+        import notes
+        f, _ = self._folder(folder)
+
+        def fn(ts):
+            t = notes.find(ts, tid)
+            if t and 0 <= idx < len(t["turns"]):
+                t["turns"][idx]["keep"] = bool(keep)
+            return t
+        return notes.mutate(f, fn)
+
+    def note_delete(self, folder, tid):
+        import notes
+        f, _ = self._folder(folder)
+
+        def fn(ts):
+            t = notes.find(ts, tid)
+            if t:
+                ts.remove(t)
+            return t
+        return notes.mutate(f, fn)
+
+    def note_restore(self, folder, thread):
+        import notes
+        f, _ = self._folder(folder)
+        notes.mutate(f, lambda ts: None if notes.find(ts, thread["id"]) else ts.append(thread))
         return True
 
-    def ask(self, folder, question, quote="", quote_t=None, web=False, mid=""):
-        """Runs in the background; streams events chat_text / chat_event / chat_done / chat_error."""
-        threading.Thread(target=self._ask, args=(folder, question, quote, quote_t, web, mid),
-                         daemon=True).start()
+    def note_keypoint(self, folder, tid):
+        """Ask Claude for a one-line key point of the kept Q&A (tiny request, no transcript)."""
+        threading.Thread(target=self._keypoint, args=(folder, tid), daemon=True).start()
         return True
 
-    def _ask(self, folder, question, quote, quote_t, web, mid):
+    def _keypoint(self, folder, tid):
+        import notes
+        from cloud import claude_chat
+        f, session = self._folder(folder)
+        t = notes.find(notes.load(f), tid) if f else None
+        if not t:
+            return
+        key = notes.fallback_key(t)
+        api_key = self.settings.get("api_key")
+        if api_key and any(x.get("keep", True) for x in t["turns"]):
+            u = {}
+            try:
+                key = claude_chat(api_key, self.settings.get("cloud_model"), notes.KEY_PROMPT,
+                                  notes.key_input(t), max_tokens=80, timeout=30, usage=u).strip().strip("。") or key
+            except CloudError:
+                pass
+            self._charge(session, u)
+
+        def fn(ts):
+            x = notes.find(ts, tid)
+            if x:
+                x["key"] = key
+        notes.mutate(f, fn)
+        self.emit("note_key", folder=f, tid=tid, key=key)
+
+    def ask(self, folder, tid, question, web=False, mid=""):
+        """Runs in the background; streams chat_text / chat_event / chat_done / chat_error."""
+        threading.Thread(target=self._ask, args=(folder, tid, question, web, mid), daemon=True).start()
+        return True
+
+    def _ask(self, folder, tid, question, web, mid):
         import assistant
+        import notes
         key = self.settings.get("api_key")
         if not key:
-            self.emit("chat_error", mid=mid, text="AI 助教需要先在设置里填写 Claude API key")
+            self.emit("chat_error", mid=mid, tid=tid, text="AI 助教需要先在设置里填写 Claude API key")
             return
-        session = self._session_for(folder)
+        f, session = self._folder(folder)
         if session is None or not session.segments:
-            self.emit("chat_error", mid=mid, text="这节课还没有内容可以问")
+            self.emit("chat_error", mid=mid, tid=tid, text="这节课还没有内容可以问")
             return
+        thread = notes.find(notes.load(f), tid)
+        if thread is None:
+            self.emit("chat_error", mid=mid, tid=tid, text="找不到这条对话")
+            return
+        anchor = thread["anchor"]
+        quote, quote_t = anchor.get("text", ""), anchor.get("t")
         question = (question or "").strip() or assistant.EXPLAIN
-        history = assistant.load_chat(session)
-        usage = {}
-        last = [0.0]
+        history = []
+        for i, turn in enumerate(thread["turns"]):
+            history.append({"role": "user", "q": turn["q"], "quote": quote if i == 0 else "",
+                            "quote_t": quote_t if i == 0 else None})
+            history.append({"role": "assistant", "text": turn["a"]})
+        first = not thread["turns"]
+        usage, last = {}, [0.0]
 
         def on_text(t):
             if time.monotonic() - last[0] > 0.08:
                 last[0] = time.monotonic()
-                self.emit("chat_text", mid=mid, text=t)
+                self.emit("chat_text", mid=mid, tid=tid, text=t)
 
         def on_event(kind, data):
-            self.emit("chat_event", mid=mid, ev=kind, data=data)
+            self.emit("chat_event", mid=mid, tid=tid, ev=kind, data=data)
 
         try:
             answer, sources, web_used = assistant.ask(
-                key, self.settings.get("cloud_model"), session, history, question, quote, quote_t, web,
+                key, self.settings.get("cloud_model"), session, history, question,
+                quote if first else "", quote_t if first else None, web,
                 on_text=on_text, on_event=on_event, usage=usage)
         except CloudError as e:
-            self.emit("chat_error", mid=mid, text=str(e))
+            self.emit("chat_error", mid=mid, tid=tid, text=str(e))
             return
         except Exception as e:
-            self.emit("chat_error", mid=mid, text=f"出错了：{e}")
+            self.emit("chat_error", mid=mid, tid=tid, text=f"出错了：{e}")
             return
         finally:
             self._charge(session, usage)
-        history += [{"role": "user", "q": question, "quote": quote, "quote_t": quote_t, "web": web_used},
-                    {"role": "assistant", "text": answer, "sources": sources,
-                     "usd": round(usage_usd(self.settings.get("cloud_model"), usage), 4)}]
-        assistant.save_chat(session, history)
-        self.emit("chat_done", mid=mid, text=answer, sources=sources,
-                  usd=round(usage_usd(self.settings.get("cloud_model"), usage), 4))
+        usd = round(usage_usd(self.settings.get("cloud_model"), usage), 4)
+        turn = {"q": question, "a": answer, "sources": sources, "usd": usd, "web": web_used, "keep": True}
+
+        def fn(ts):
+            t = notes.find(ts, tid)
+            if t is not None:
+                t["turns"].append(turn)
+                return len(t["turns"]) - 1
+            return -1
+        idx = notes.mutate(f, fn)
+        self.emit("chat_done", mid=mid, tid=tid, idx=idx, text=answer, sources=sources, usd=usd)
 
     # ---------- history ----------
     def list_sessions(self):

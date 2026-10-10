@@ -72,14 +72,29 @@ class Api:
         return self._e.summarize(folder)
 
     # ---- AI 助教 ----
-    def get_chat(self, folder=""):
-        return self._e.get_chat(folder)
+    def notes_list(self, folder=""):
+        return self._e.notes_list(folder)
 
-    def clear_chat(self, folder=""):
-        return self._e.clear_chat(folder)
+    def note_new(self, folder, anchor):
+        return self._e.note_new(folder, anchor)
 
-    def ask(self, folder, question, quote="", quote_t=None, web=False, mid=""):
-        return self._e.ask(folder, question, quote, quote_t, web, mid)
+    def note_update(self, folder, tid, fields):
+        return self._e.note_update(folder, tid, fields)
+
+    def note_keep(self, folder, tid, idx, keep):
+        return self._e.note_keep(folder, tid, int(idx), keep)
+
+    def note_delete(self, folder, tid):
+        return self._e.note_delete(folder, tid)
+
+    def note_restore(self, folder, thread):
+        return self._e.note_restore(folder, thread)
+
+    def note_keypoint(self, folder, tid):
+        return self._e.note_keypoint(folder, tid)
+
+    def ask(self, folder, tid, question, web=False, mid=""):
+        return self._e.ask(folder, tid, question, web, mid)
 
     def open_url(self, url):
         import webbrowser
