@@ -424,14 +424,20 @@ function addSeg(s){
     if(prev) prev.classList.remove("latest");
     $("#segs").insertAdjacentHTML("beforeend", segHtml(s));
     const el=lastSeg(); el.classList.add("latest");
+    let keep=[];
     if(hadLive){
       // keep the very same words on screen: move them into the sentence, then quietly fix any that changed
       const en=el.querySelector(".en"); en.textContent="";
-      for(const sp of [...$("#ptext").children]){ sp.classList.remove("new"); en.appendChild(sp); }
-      reconcile(en, s.en.split(/\s+/).filter(Boolean), false);
+      const fw=s.en.split(/\s+/).filter(Boolean), live=[...$("#ptext").children];
+      // a fast speaker's sentence finished early: words of the next sentence stay on the live line
+      let m=live.length;
+      if(live.length>fw.length && norm(live[fw.length-1].textContent)===norm(fw[fw.length-1])) m=fw.length;
+      keep=live.slice(m);
+      for(const sp of live.slice(0,m)){ sp.classList.remove("new"); en.appendChild(sp); }
+      reconcile(en, fw, false);
     }
     reserveZh(el);
-    resetLive();
+    if(keep.length) lastHyp=keep.map(x=>x.textContent.trim()); else resetLive();
   }, anchor);
 }
 function setZh(id, zh, live){

@@ -69,6 +69,10 @@ def make_vad(c=None):
     return sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=120), cfg.silero_vad.window_size
 
 
+def _norm(w: str) -> str:
+    return "".join(c for c in w.lower() if c.isalnum() or c == "'")
+
+
 def _clean(text: str) -> str:
     t = " ".join(text.split())
     if t and t[0].islower():
@@ -165,38 +169,90 @@ class Recognizer:
             x = np.clip(x, -1, 1)
         return x.astype(np.float32)
 
+    # ---- committing whole sentences while the speaker keeps going ----
+    # Fast speakers (news, policy talks) barely pause, so voice detection alone would wait 10+ s
+    # before ending a "sentence". When two consecutive previews agree on a complete sentence
+    # (and the speaker has already moved on to the next one), that sentence is finished early,
+    # using the model's word timings to cut the audio exactly between the two sentences.
+    COMMIT_FORCE = 12.0   # s of uncommitted speech before committing at a comma/agreed words
+
+    def _decode_words(self, samples):
+        """[(word, start_sec)] using token timings, or None if the model has none."""
+        s = self.rec.create_stream()
+        s.accept_waveform(SR, samples)
+        self.rec.decode_stream(s)
+        r = s.result
+        toks, ts = list(getattr(r, "tokens", []) or []), list(getattr(r, "timestamps", []) or [])
+        if not toks or len(toks) != len(ts):
+            return _clean(r.text), None
+        words = []
+        for tok, t in zip(toks, ts):
+            if tok.startswith(" ") or tok.startswith("\u2581") or not words:
+                words.append([tok.strip().lstrip("\u2581"), t])
+            else:
+                words[-1][0] += tok
+        words = [(w, t) for w, t in words if w]
+        return _clean(r.text), words
+
+    def _try_commit(self, a, words, prev, length):
+        """Returns the number of words to commit now (0 = none)."""
+        k = 0
+        while k < len(prev) and k < len(words) and _norm(prev[k]) == _norm(words[k][0]):
+            k += 1
+        # the last agreed sentence end that already has a following word
+        for j in range(min(k, len(words) - 1) - 1, -1, -1):
+            if words[j][0][-1:] in ".?!" and j >= 2:
+                return j + 1
+        if length > self.COMMIT_FORCE and k >= 8:
+            for j in range(min(k, len(words) - 1) - 1, 3, -1):
+                if words[j][0][-1:] in ",;:":
+                    return j + 1
+            return k - 2
+        return 0
+
     def _run(self):
         buf = np.zeros(0, dtype=np.float32)
-        speech = []          # audio since speech started (for preview)
+        speech = False       # inside speech (for preview)
         last_preview = 0.0
         preview_gap = PREVIEW_EVERY
         self._hist = np.zeros(0, dtype=np.float32)   # raw audio of the last ~40 s
         self._hist_start = 0                          # absolute sample index of _hist[0]
         self._levels, self._g = [], 1.0
+        sp_start = 0         # absolute sample where the current speech began
+        cut = None           # absolute sample where uncommitted speech begins (after an early commit)
+        prev = []            # previous preview's words (same start point)
         while True:
             item = self.q.get()
             if item is None:
                 break
             self._hist = np.concatenate([self._hist, item])
             if len(self._hist) > SR * 40:
-                cut = len(self._hist) - SR * 30
-                self._hist = self._hist[cut:]
-                self._hist_start += cut
+                drop = len(self._hist) - SR * 30
+                self._hist = self._hist[drop:]
+                self._hist_start += drop
             g = self._gain(item)
             buf = np.concatenate([buf, item * g if g != 1.0 else item])
             while len(buf) >= self.win:
                 chunk, buf = buf[:self.win], buf[self.win:]
                 self.vad.accept_waveform(np.clip(chunk, -1, 1) if g != 1.0 else chunk)
                 self.samples_seen += self.win
-                if self.vad.is_speech_detected():
-                    speech.append(chunk)
+                if self.vad.is_speech_detected() and not speech:
+                    speech = True
+                    sp_start = max(self._hist_start, self.samples_seen - int(0.5 * SR))
                 while not self.vad.empty():
                     seg = self.vad.front
-                    samples = self._segment_audio(seg)
-                    start = seg.start / SR
+                    if cut is not None and cut > seg.start:
+                        # part of this sentence group was already committed: finish the rest
+                        end = seg.start + len(seg.samples) + int(self.cfg["pad_post"] * SR)
+                        a = max(self._hist_start, cut)
+                        samples = self._hist[a - self._hist_start:end - self._hist_start].astype(np.float32)
+                        start = a / SR
+                    else:
+                        samples = self._segment_audio(seg)
+                        start = seg.start / SR
                     self.vad.pop()
-                    speech = []
-                    text = self._decode(samples)
+                    speech, cut, prev = False, None, []
+                    text = self._decode(samples) if len(samples) > SR * 0.2 else ""
                     if text:
                         self.on_final(text, start)
                     else:
@@ -205,10 +261,23 @@ class Recognizer:
             # (skipped while behind, so a slow computer catches up instead of lagging further)
             if (self.live_preview and speech and self.q.qsize() <= 2
                     and time.monotonic() - last_preview > preview_gap):
-                audio = np.concatenate(speech)[-int(self.cfg['max_seg'] * SR):]
+                a = max(self._hist_start, cut if cut is not None else sp_start)
+                audio = self._hist[a - self._hist_start:][-int(20 * SR):]
+                a = self._hist_start + len(self._hist) - len(audio)
                 if len(audio) > SR * 0.5:
                     t0 = time.monotonic()
-                    self.on_partial(self._decode(audio))
+                    text, words = self._decode_words(audio)
+                    if words:
+                        n = self._try_commit(a, words, prev, len(audio) / SR)
+                        if n:
+                            sent = _clean(" ".join(w for w, _ in words[:n]))
+                            nxt = words[n][1] if n < len(words) else len(audio) / SR
+                            cut = a + int(max(0.0, nxt - 0.04) * SR)
+                            self.on_final(sent, (a / SR) + max(0.0, words[0][1] - 0.1))
+                            words = words[n:]
+                            text = " ".join(w for w, _ in words)
+                        prev = [w for w, _ in words]
+                    self.on_partial(text)
                     # slow computer -> preview less often so final sentences are never delayed
                     preview_gap = max(PREVIEW_EVERY, 2.0 * (time.monotonic() - t0))
                 last_preview = time.monotonic()
@@ -216,9 +285,15 @@ class Recognizer:
         self.vad.flush()
         while not self.vad.empty():
             seg = self.vad.front
-            samples = self._segment_audio(seg)
-            start = seg.start / SR
+            if cut is not None and cut > seg.start:
+                a = max(self._hist_start, cut)
+                samples = self._hist[a - self._hist_start:seg.start + len(seg.samples) - self._hist_start]
+                start = a / SR
+            else:
+                samples = self._segment_audio(seg)
+                start = seg.start / SR
+            cut = None
             self.vad.pop()
-            text = self._decode(samples)
+            text = self._decode(np.asarray(samples, dtype=np.float32)) if len(samples) > SR * 0.2 else ""
             if text:
                 self.on_final(text, start)
