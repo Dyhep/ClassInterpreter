@@ -95,7 +95,12 @@ class Engine:
         self.batch_lock = threading.Lock()
         self.usage = {"in": 0, "out": 0, "requests": 0}
         self.usage_lock = threading.Lock()
+        self.state = "idle"        # idle | starting | recording | stopping
+        self._ctl = threading.Lock()
+        self._models = {}
+        self._model_lock = threading.Lock()
         threading.Thread(target=self._batch_timer, daemon=True).start()
+        threading.Thread(target=self._warmup, daemon=True).start()
         for _ in range(3):  # parallel workers so a slow reply never holds up later sentences
             threading.Thread(target=self._translate_loop, daemon=True).start()
         threading.Thread(target=self._autosave_loop, daemon=True).start()
@@ -111,7 +116,7 @@ class Engine:
     def poll(self, after: int):
         with self.ev_lock:
             evs = [e for e in self.events if e["seq"] > after]
-        return {"events": evs, "level": round(self.level, 4), "recording": self.recording,
+        return {"events": evs, "level": round(self.level, 4), "recording": self.recording, "state": self.state,
                 "elapsed": (time.time() - self.t_start) if self.recording else 0}
 
     # ---------- models ----------
@@ -136,33 +141,98 @@ class Engine:
         self.downloads[name] = Download(name)
 
     # ---------- recording ----------
-    def start(self, source_id: str, title: str = ""):
-        if self.recording:
-            return
-        self.emit("status", text="正在加载语音识别模型…")
-        from asr import Recognizer
+    # ---------- models are loaded once and kept ----------
+    def _asr_name(self):
         name = self.settings.get("asr_model")
-        if not is_installed(name):
-            name = "moonshine"
-        self.recognizer = Recognizer(name, self.settings.threads(), self._on_partial, self._on_final,
-                                     live_preview=bool(self.settings.get("live_preview"))
-                                     and not source_id.startswith("file:"))
+        return name if is_installed(name) else "moonshine"
+
+    def _get_asr_model(self, name=None):
+        from asr import make_recognizer
+        name = name or self._asr_name()
+        with self._model_lock:
+            if name not in self._models:
+                self._models = {name: make_recognizer(name, self.settings.threads())}
+            return self._models[name]
+
+    def _warmup(self):
+        """Load the speech model (and the offline translator) right after launch, so 开始 is instant."""
+        try:
+            self._get_asr_model()
+            import asr
+            asr.make_vad()
+        except Exception:
+            pass
+        try:
+            self._local_translator()
+        except Exception:
+            pass
+
+    # ---------- recording ----------
+    def _set_state(self, st):
+        self.state = st
+        self.recording = st in ("starting", "recording")
+        self.emit("state", state=st)
+
+    def start(self, source_id: str, title: str = ""):
+        """Returns at once; progress arrives as events. Ignored unless idle."""
+        with self._ctl:
+            if self.state != "idle":
+                return False
+            self._set_state("starting")
+        try:
+            self._start(source_id, title)
+            return True
+        except Exception as e:
+            self.emit("error", text=f"无法开始：{e}")
+            self._set_state("idle")
+            return False
+
+    def _start(self, source_id, title):
+        from asr import Recognizer
         self.session = Session.new(self.settings.sessions_dir(), title)
+        session = self.session
         self.summarizer.chunk_notes.clear()
         with self.usage_lock:
             self.usage = {"in": 0, "out": 0, "requests": 0}
-        self.emit("session", session=self.session.to_dict())
+        with self.batch_lock:
+            self.batch = []
+        self.emit("session", session=session.to_dict())
         self.settings.update({"source": source_id})
-        rec = self.recognizer
+        loaded = self._asr_name() in self._models
+        if not loaded:
+            self.emit("status", text="正在加载语音识别模型…（已经在录音，这段时间说的话不会丢）")
+
+        def ready():
+            if self.state == "starting" and self.session is session:
+                self._set_state("recording")
+                self.emit("status", text="正在聆听…")
+
+        rec = Recognizer(self._get_asr_model,
+                         lambda t: self._on_partial(t) if self.session is session else None,
+                         lambda t, st: self._on_final(t, st, session),
+                         live_preview=bool(self.settings.get("live_preview")) and not source_id.startswith("file:"),
+                         on_ready=ready, on_error=self._on_capture_error)
+        self.recognizer = rec
         self.capture = Capture(source_id, rec.push, on_error=self._on_capture_error,
                                on_level=self._on_level,
                                on_progress=lambda p: self.emit("status", text=f"正在处理录音文件… {p}%"),
                                on_done=lambda: threading.Thread(target=self.stop, daemon=True).start(),
                                busy=lambda: rec.backlog() > 20)
-        self.recording = True
         self.t_start = time.time()
         self.capture.start()
-        self.emit("status", text="正在聆听…")
+        threading.Thread(target=self._watch_lag, args=(rec, session), daemon=True).start()
+
+    def _watch_lag(self, rec, session):
+        """Warn once if the computer can't keep up (recognition falling behind real time)."""
+        warned = False
+        while self.session is session and self.state in ("starting", "recording"):
+            time.sleep(2)
+            behind = rec.backlog() / 10  # seconds
+            if behind > 8 and not warned and self.state == "recording":
+                warned = True
+                self.emit("warning", text=f"电脑有点跟不上（落后约 {behind:.0f} 秒），可以在设置里关掉“实时预览”")
+            elif behind < 2:
+                warned = False
 
     def _on_level(self, v):
         self.level = v
@@ -172,32 +242,41 @@ class Engine:
         threading.Thread(target=self.stop, daemon=True).start()
 
     def stop(self):
-        if not self.recording:
-            return
-        self.recording = False
+        """Returns at once; finishing the last sentences happens in the background."""
+        with self._ctl:
+            if self.state not in ("starting", "recording"):
+                return False
+            self._set_state("stopping")
         self.emit("status", text="正在处理最后几句…")
-        if self.capture:
-            self.capture.stop()
-        if self.recognizer:
-            self.recognizer.stop()
-            self.recognizer = None
-        self._flush_batch()
-        self.tr_q.join()
-        if self.session:
-            self.session.duration = time.time() - self.t_start
-            self.session.save()
-        self.summarizer.llm.stop()
+        cap, rec, session = self.capture, self.recognizer, self.session
+        if cap:
+            cap.stop()
         self.level = 0.0
-        self.emit("stopped", session=self.session.to_dict() if self.session else None)
-        self.emit("status", text="已停止，记录已保存")
+        try:
+            if rec and not rec.stop(timeout=30):
+                self.emit("warning", text="最后几句识别超时，已跳过")
+            self.recognizer = None
+            self._flush_batch()
+            t0 = time.time()
+            while self.tr_q.unfinished_tasks and time.time() - t0 < 25:
+                time.sleep(0.1)
+            if session:
+                session.duration = time.time() - self.t_start
+                session.save()
+            self.summarizer.llm.stop()
+        finally:
+            self._set_state("idle")
+            self.emit("stopped", session=session.to_dict() if session else None)
+            self.emit("status", text="已停止，记录已保存")
+        return True
 
     def _on_partial(self, text):
         self.emit("partial", text=text)
 
-    def _on_final(self, text, start):
+    def _on_final(self, text, start, session=None):
         s = self.session
-        if s is None:
-            return
+        if s is None or (session is not None and session is not s):
+            return  # a finished/abandoned recording must never write into the current one
         seg = {"id": len(s.segments), "t": round(start, 1), "en": text, "zh": ""}
         s.segments.append(seg)
         self.emit("final", seg=seg)

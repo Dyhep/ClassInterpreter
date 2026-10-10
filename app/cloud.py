@@ -50,7 +50,7 @@ def claude_chat(api_key: str, model: str, system: str, user: str, max_tokens=102
     return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
 
-def claude_stream(api_key: str, model: str, system: str, user: str, max_tokens=600, timeout=30,
+def claude_stream(api_key: str, model: str, system: str, user: str, max_tokens=600, timeout=15,
                   usage=None):
     """Yields text pieces as Claude writes them (low latency for live captions)."""
     body = json.dumps({

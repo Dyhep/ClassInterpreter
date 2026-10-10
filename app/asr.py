@@ -57,28 +57,49 @@ class Recognizer:
        on_final(text, start_sec)   – a finished sentence
     """
 
-    def __init__(self, model_name, threads, on_partial, on_final, live_preview=True):
-        self.rec = make_recognizer(model_name, threads)
-        self.vad, self.win = make_vad()
+    def __init__(self, get_model, on_partial, on_final, live_preview=True, on_ready=None, on_error=None):
+        """get_model() returns a loaded OfflineRecognizer; it runs on the worker thread, and audio
+        pushed meanwhile is kept, so nothing said while the model loads is lost."""
+        self.get_model = get_model
+        self.rec = None
         self.on_partial = on_partial
         self.on_final = on_final
+        self.on_ready = on_ready or (lambda: None)
+        self.on_error = on_error or (lambda e: None)
         self.live_preview = live_preview
         self.q = queue.Queue()
         self._stop = threading.Event()
         self.samples_seen = 0
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread = threading.Thread(target=self._run_safe, daemon=True)
         self.thread.start()
 
     def push(self, audio: np.ndarray):
-        self.q.put(audio)
+        if not self._stop.is_set():
+            self.q.put(audio)
 
-    def stop(self):
+    def stop(self, timeout=None):
+        """Finish the sentences already heard, then end. Returns True if it finished in time."""
         self._stop.set()
         self.q.put(None)
-        self.thread.join()
+        self.thread.join(timeout)
+        return not self.thread.is_alive()
 
     def backlog(self) -> int:
+        """Audio waiting to be processed, in 0.1 s blocks."""
         return self.q.qsize()
+
+    def _run_safe(self):
+        try:
+            self.rec = self.get_model()
+            self.vad, self.win = make_vad()
+        except Exception as e:
+            self.on_error(f"语音识别模型加载失败：{e}")
+            return
+        self.on_ready()
+        try:
+            self._run()
+        except Exception as e:
+            self.on_error(f"语音识别出错：{e}")
 
     def _decode(self, samples) -> str:
         s = self.rec.create_stream()
@@ -114,7 +135,8 @@ class Recognizer:
                     else:
                         self.on_partial("")
             # live preview of the sentence in progress
-            if (self.live_preview and speech and self.q.empty()
+            # (skipped while behind, so a slow computer catches up instead of lagging further)
+            if (self.live_preview and speech and self.q.qsize() <= 2
                     and time.monotonic() - last_preview > preview_gap):
                 audio = np.concatenate(speech)[-int(MAX_SEG * SR):]
                 if len(audio) > SR * 0.5:

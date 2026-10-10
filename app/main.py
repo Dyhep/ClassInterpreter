@@ -51,15 +51,11 @@ class Api:
         return self._e.poll(int(after))
 
     def start(self, source_id, title=""):
-        try:
-            self._e.start(source_id, title)
-            return {"ok": True}
-        except Exception as ex:
-            self._e.recording = False
-            return {"ok": False, "error": str(ex)}
+        ok = self._e.start(source_id, title)
+        return {"ok": True} if ok else {"ok": False, "busy": True}
 
     def stop(self):
-        self._e.stop()
+        threading.Thread(target=self._e.stop, daemon=True).start()
         return True
 
     def import_file(self, title=""):

@@ -301,19 +301,29 @@ $("#transcript").addEventListener("scroll", ()=>{ const t=$("#transcript");
 $("#jump").onclick=()=>{ autoScroll=true; scrollEnd(true); };
 
 /* ---------- recording ---------- */
+let recState="idle", clickLock=false;
 async function toggleRec(){
-  if(recording){ $("#recLabel").textContent="停止中…"; await api.stop(); return; }
+  if(clickLock) return;
+  if(recState==="starting" || recState==="stopping") return;
+  clickLock=true; setTimeout(()=>clickLock=false, 800);
+  if(recState==="recording"){ setRecState("stopping"); await api.stop(); return; }
   if(viewing){ viewing=null; }
   $("#segs").innerHTML=""; $("#partial").textContent=""; summaryText=""; renderSummary();
-  setStatus("正在启动…");
+  setRecState("starting");
   const r = await api.start($("#source").value, $("#title").value.trim());
-  if(!r.ok) toast("无法开始："+r.error, true);
+  if(!r.ok && !r.busy){ toast("无法开始", true); setRecState("idle"); }
 }
-function setRecording(on){
-  recording=on; $("#recBtn").classList.toggle("on",on); $("#recLabel").textContent=on?"停止":"开始";
-  $("#source").disabled=on; $("#title").disabled=on; $("#importBtn").disabled=on;
-  if(!on){ $("#timer").textContent=""; $("#level").style.width="0"; }
+function setRecState(st){
+  recState=st; recording = (st==="starting" || st==="recording");
+  const btn=$("#recBtn");
+  btn.classList.toggle("on", st!=="idle");
+  btn.disabled = (st==="starting" || st==="stopping");
+  btn.style.opacity = btn.disabled? ".75" : "";
+  $("#recLabel").textContent = {idle:"开始", starting:"准备中…", recording:"停止", stopping:"停止中…"}[st];
+  $("#source").disabled = $("#title").disabled = $("#importBtn").disabled = st!=="idle";
+  if(st==="idle"){ $("#timer").textContent=""; $("#level").style.width="0"; }
 }
+function setRecording(on){ setRecState(on? "recording" : "idle"); }
 function setStatus(t){ $("#status").textContent=t; }
 
 async function pollLoop(){
@@ -331,12 +341,13 @@ async function pollLoop(){
         case "status": setStatus(e.text); break;
         case "warning": setStatus(e.text); break;
         case "error": toast(e.text, true); setStatus(e.text); break;
+        case "state": setRecState(e.state); break;
         case "stopped": refreshHistory(); if(e.session && e.session.segments.length) { openSide(); } break;
         case "summary_progress": if(e.folder===summaryFolder) sumProgress(e.p, e.text); break;
         case "summary": if(e.folder===summaryFolder){ summaryText=e.text; renderSummary(); } refreshHistory(); break;
       }
     }
-    if(r.recording!==recording) setRecording(r.recording);
+    if(r.state && r.state!==recState) setRecState(r.state);
     if(r.recording){ $("#timer").textContent=fmt(r.elapsed); $("#level").style.width=Math.min(100, Math.sqrt(r.level)*260)+"%"; }
   }catch(err){ console.error(err); }
   setTimeout(pollLoop, 250);
