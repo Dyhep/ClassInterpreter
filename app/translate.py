@@ -17,6 +17,22 @@ def to_simplified(s: str) -> str:
     return _t2s.convert(s) if _t2s else s
 
 
+_CJK = "\u4e00-\u9fff"
+_PUNCT = {",": "，", "?": "？", "!": "！", ":": "：", ";": "；"}
+
+
+def tidy_zh(s: str) -> str:
+    """Full-width punctuation next to Chinese text, and a final full stop."""
+    s = s.strip()
+    for a, b in _PUNCT.items():
+        s = re.sub(rf"(?<=[{_CJK}])\s*{re.escape(a)}\s*", b, s)
+        s = re.sub(rf"\s*{re.escape(a)}\s*(?=[{_CJK}])", b, s)
+    s = re.sub(rf"(?<=[{_CJK}])\.(?!\d)", "。", s)
+    if s and re.match(rf"[{_CJK}）)]", s[-1]):
+        s += "。"
+    return s
+
+
 class LocalTranslator:
     def __init__(self, threads: int = 2):
         import ctranslate2
@@ -46,7 +62,7 @@ class LocalTranslator:
             out.append(self.sp_tgt.decode_pieces(toks))
         s = "".join(out)
         s = re.sub(r"(?<=[　-〿一-鿿＀-￯])\s+|\s+(?=[　-〿一-鿿＀-￯])", "", s)
-        return to_simplified(s.strip())
+        return tidy_zh(to_simplified(s))
 
 
 SYSTEM_TRANSLATE = (
