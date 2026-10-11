@@ -219,17 +219,100 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
   #transcript{padding:14px 14px 120px}
   .ibtn span{display:none}
 }
+
+/* ---------- history: courses ---------- */
+.hgroup{margin:4px 0 8px}
+.hgh{display:flex;align-items:center;gap:6px;padding:8px 10px 6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;border-radius:8px}
+.hgh:hover{background:var(--bg)}
+.hgh .chev{transition:transform .15s;width:14px;height:14px}
+.hgroup.fold .chev{transform:rotate(-90deg)}
+.hgroup.fold .hitems{display:none}
+.hgh b{color:var(--ink);font-weight:600;font-size:13px}
+.hitem{position:relative;padding-right:40px}
+.hitem .more{position:absolute;right:6px;top:8px;height:28px;min-width:28px;padding:0 6px;opacity:0;transition:opacity .15s}
+.hitem:hover .more,.hitem .more.open,.hitem.cur .more{opacity:1}
+.hitem .ren{width:100%;font:inherit;font-weight:600;border:1px solid var(--accent);border-radius:6px;padding:2px 6px;background:var(--panel);margin-bottom:2px}
+.badge{font-size:11px;padding:0 6px;border-radius:8px;background:var(--note-soft);color:var(--note);font-weight:500;margin-left:6px;vertical-align:1px}
+.pop{position:fixed;z-index:46;min-width:190px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:none}
+.pop.show{display:block}
+.pop button{display:flex;width:100%;align-items:center;gap:8px;border:none;background:none;text-align:left;padding:7px 10px;border-radius:7px;font-size:13.5px;color:var(--ink)}
+.pop button:hover,.pop button.sel{background:var(--bg)}
+.pop button.danger{color:var(--rec)}
+.pop hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+.pop .lbl{font-size:12px;color:var(--faint);padding:4px 10px 2px}
+.pop input{width:100%;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:0 8px;margin:4px 0 2px}
+
+/* ---------- search (Ctrl+K) ---------- */
+.search-trigger{height:34px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--faint);min-width:170px;font-size:13px}
+.search-trigger:hover{border-color:var(--faint);color:var(--muted)}
+.search-trigger span{flex:1;text-align:left}
+kbd{font:11px/1 "Segoe UI",system-ui,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:2px 5px;color:var(--muted);background:var(--panel)}
+#palette{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.28);display:none;padding:9vh 16px 16px}
+#palette.show{display:block}
+.pal-box{max-width:660px;margin:0 auto;background:var(--panel);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;display:flex;flex-direction:column;max-height:76vh}
+.pal-in{display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line)}
+.pal-in input{flex:1;height:54px;border:none;outline:none;background:transparent;font-size:16px;-webkit-user-select:text;user-select:text}
+#palResults{overflow-y:auto;padding:6px 8px 10px}
+.pal-empty{padding:26px 16px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.9}
+.pg{padding:10px 10px 4px;font-size:12px;color:var(--faint);display:flex;gap:8px;align-items:baseline}
+.pg b{color:var(--muted);font-weight:600;font-size:12.5px}
+.pr{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:9px;cursor:pointer;line-height:1.55}
+.pr.sel{background:var(--accent-soft)}
+.pr .k{flex:none;font-size:11px;padding:1px 7px;border-radius:8px;border:1px solid var(--line);color:var(--muted);margin-top:2px}
+.pr .k.note{border-color:transparent;background:var(--note-soft);color:var(--note)}
+.pr .x{flex:1;min-width:0;font-size:14px}
+.pr .x .z{color:var(--zh-ink);font-size:13px}
+.pr .ts2{flex:none;color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums;margin-top:2px}
+mark{background:var(--warn-soft);color:inherit;border-radius:3px;padding:0 1px}
+.pal-foot{border-top:1px solid var(--line);padding:7px 14px;font-size:12px;color:var(--faint);display:flex;gap:14px}
+
+/* ---------- guided tour ---------- */
+#tourLayer{position:fixed;inset:0;z-index:50;pointer-events:none;display:none}
+#tourLayer.show{display:block}
+#tourHole{position:fixed;border-radius:10px;box-shadow:0 0 0 9999px rgba(18,20,24,.42);transition:left .3s ease,top .3s ease,width .3s ease,height .3s ease,opacity .2s;outline:2px solid var(--accent);outline-offset:0}
+#tourHole.none{width:0!important;height:0!important;left:50%!important;top:40%!important;outline:none}
+#tourHole.act::after{content:"";position:absolute;inset:-2px;border-radius:12px;border:2px solid var(--accent);animation:ring 1.6s ease-out infinite}
+@keyframes ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.08)}}
+#tourCard{position:fixed;width:330px;max-width:calc(100vw - 24px);background:var(--panel);border-radius:14px;box-shadow:0 14px 44px rgba(0,0,0,.24);padding:16px 18px 14px;pointer-events:auto;transition:left .3s ease,top .3s ease;border:1px solid var(--line)}
+#tourCard h4{margin:0 0 6px;font-size:15.5px;display:flex;gap:8px;align-items:center}
+#tourCard h4 small{margin-left:auto;font-weight:400;color:var(--faint);font-size:12px}
+#tourCard .tt{font-size:14px;line-height:1.75;color:var(--ink)}
+#tourCard .tt b{color:var(--accent)}
+#tourCard .try{margin-top:10px;padding:7px 10px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:13.5px;line-height:1.6}
+#tourCard .tf{display:flex;gap:8px;align-items:center;margin-top:12px}
+#tourCard .tf .grow{flex:1}
+#tourCard .tf .link{border:none;background:none;color:var(--faint);font-size:12.5px;padding:0}
+#tourCard .tf .link:hover{color:var(--muted)}
+#tourCard .dots{display:flex;gap:4px}
+#tourCard .dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}
+#tourCard .dots i.on{background:var(--accent)}
+#tourCard.center{left:50%!important;top:50%!important;transform:translate(-50%,-50%);width:380px}
+.tour-menu button small{margin-left:auto;color:var(--faint);font-size:12px}
+@media (prefers-reduced-motion: reduce){#tourHole,#tourCard{transition:none}#tourHole.act::after{animation:none}}
+#selbar,#ntip{z-index:70}
+.pop input:focus{outline:none;border-color:var(--accent)}
+@media (max-width:1420px){
+  header .ibtn:not(#tourBtn) span,.search-trigger span{display:none}
+  .search-trigger{min-width:0}
+  #source{flex-basis:150px} #title{flex-basis:110px}
+  header{gap:8px}
+}
+.timer:empty{display:none}
+#toast{z-index:80}
+body.touring #toast{top:auto;bottom:56px}
 </style>
 </head>
 <body>
 <header>
   <div class="brand">课堂同传<small>EN → 中</small></div>
   <select id="source" class="field" title="声音来源"></select>
-  <input id="title" class="field" placeholder="课程名称（可选）" maxlength="60">
+  <input id="title" class="field" placeholder="课程名（可选）" maxlength="60">
   <button id="recBtn" class="rec-btn"><span class="dot"></span><span id="recLabel">开始</span></button>
   <span class="timer" id="timer"></span>
   <div class="meter" title="音量"><i id="level"></i></div>
   <div class="spacer"></div>
+  <button class="search-trigger" id="searchBtn" title="搜索所有课程的原文、翻译、总结和笔记">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span>搜索课程…</span><kbd>Ctrl K</kbd></button>
   <button class="ibtn" id="importBtn" title="导入录音文件">
     <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>导入录音</span></button>
   <button class="ibtn" id="histBtn" title="历史记录">
@@ -240,6 +323,8 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
     <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4zM9 10h.01M12 10h.01M15 10h.01"/></svg><span>AI 助教</span></button>
   <button class="ibtn" id="topBtn" title="窗口置顶（看网课时用）">
     <svg class="icon" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v7"/></svg></button>
+  <button class="ibtn" id="tourBtn" title="新手引导：带你把各个功能操作一遍">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></svg><span>引导</span></button>
   <button class="ibtn" id="setBtn" title="设置">
     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
@@ -351,6 +436,15 @@ a.ts{color:var(--accent);background:var(--accent-soft);border-radius:5px;padding
   <button data-a="web">网上搜</button><button data-a="copy">复制</button>
 </div>
 <div id="ntip"></div>
+<div class="pop" id="hmenu"></div>
+<div class="pop tour-menu" id="tourMenu"></div>
+<div id="palette"><div class="pal-box">
+  <div class="pal-in"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="palInput" placeholder="搜索所有课程：英文、中文、总结、笔记都可以" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+  <div id="palResults"></div>
+  <div class="pal-foot"><span>↑↓ 选择</span><span>Enter 打开</span><span>空格分隔多个关键词</span></div>
+</div></div>
+<div id="tourLayer"><div id="tourHole"></div><div id="tourCard"></div></div>
 <div id="toast"></div>
 
 <script>
@@ -583,6 +677,7 @@ async function toggleRec(){
   clickLock=true; setTimeout(()=>clickLock=false, 800);
   if(recState==="recording"){ setRecState("stopping"); await api.stop(); return; }
   if(viewing){ viewing=null; }
+  curMeta=null;
   $("#segs").innerHTML=""; showLive(false); flow().style.transform=""; summaryText=""; renderSummary();
   setRecState("starting");
   const r = await api.start($("#source").value, $("#title").value.trim());
@@ -678,21 +773,102 @@ $("#closeSide").onclick=closeSide;
 $("#copySum").onclick=async ()=>{ try{ await navigator.clipboard.writeText(summaryText); toast("已复制"); }catch{ toast("复制失败",true) } };
 $("#openFolder").onclick=()=> api.open_folder(summaryFolder);
 
-/* ---------- history ---------- */
+/* ---------- history: rename any time, file classes under courses ---------- */
+let histList=[], folded=new Set();
+const CHEV='<svg class="icon chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+function hitemHtml(h){
+  return `<div class="hitem${h.folder===summaryFolder?" cur":""}" data-f="${esc(h.folder)}">
+    <b class="ht">${esc(h.title)}${h.demo?'<span class="badge">示例</span>':""}</b><div class="muted"><span>${esc((h.started||"").replace("T"," ").slice(0,16))}</span>
+    <span>${fmt(h.duration)}</span><span>${h.count} 句</span>${h.has_summary?"<span>✓ 已总结</span>":""}${h.usd?`<span>$${h.usd.toFixed(2)}</span>`:""}</div>
+    <button class="ibtn more" title="重命名 / 归档 / 删除">⋯</button></div>`;
+}
 async function refreshHistory(){
-  const list = await api.sessions();
-  $("#hist-list").innerHTML = list.length? list.map(h=>`<div class="hitem${h.folder===summaryFolder?" cur":""}" data-f="${esc(h.folder)}">
-    <b>${esc(h.title)}</b><div class="muted"><span>${esc((h.started||"").replace("T"," ").slice(0,16))}</span>
-    <span>${fmt(h.duration)}</span><span>${h.count} 句</span>${h.has_summary?"<span>✓ 已总结</span>":""}${h.usd?`<span>$${h.usd.toFixed(2)}</span>`:""}</div></div>`).join("")
-    : `<p class="muted" style="padding:12px">还没有记录</p>`;
-  document.querySelectorAll(".hitem").forEach(el=> el.onclick=()=>openHistory(el.dataset.f));
+  histList = await api.sessions();
+  if(!histList.length){ $("#hist-list").innerHTML=`<p class="muted" style="padding:12px">还没有记录</p>`; return; }
+  // classes not filed yet first, then one group per course (most recent course first)
+  const groups=new Map([["",[]]]);
+  for(const h of histList){ const c=h.course||""; if(!groups.has(c)) groups.set(c,[]); groups.get(c).push(h); }
+  let html="";
+  for(const [c, items] of groups){
+    if(!items.length) continue;
+    const name = c || "未归档";
+    html += `<div class="hgroup${folded.has(c)?" fold":""}" data-c="${esc(c)}"><div class="hgh">${CHEV}<b>${esc(name)}</b><span>${items.length}</span></div>
+      <div class="hitems">${items.map(hitemHtml).join("")}</div></div>`;
+  }
+  $("#hist-list").innerHTML = html;
+}
+$("#hist-list").addEventListener("click", e=>{
+  const g=e.target.closest(".hgh");
+  if(g){ const box=g.parentElement, c=box.dataset.c; box.classList.toggle("fold"); box.classList.contains("fold")? folded.add(c) : folded.delete(c); return; }
+  const more=e.target.closest(".more");
+  if(more){ e.stopPropagation(); openHMenu(more.closest(".hitem").dataset.f, more); return; }
+  const it=e.target.closest(".hitem");
+  if(it && !e.target.closest(".ren")) openHistory(it.dataset.f);
+});
+function placePop(pop, anchor){
+  pop.classList.add("show");
+  const r=anchor.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight;
+  pop.style.left=Math.min(Math.max(8, r.right-w), innerWidth-w-8)+"px";
+  pop.style.top=(r.bottom+4+h<innerHeight? r.bottom+4 : Math.max(8, r.top-h-4))+"px";
+}
+function closePops(){ document.querySelectorAll(".pop.show").forEach(p=>p.classList.remove("show")); document.querySelectorAll(".more.open").forEach(b=>b.classList.remove("open")); }
+document.addEventListener("mousedown", e=>{ if(!e.target.closest(".pop,.more,#tourBtn")) closePops(); });
+function openHMenu(folder, btn){
+  closePops(); btn.classList.add("open");
+  const h=histList.find(x=>x.folder===folder); if(!h) return;
+  const m=$("#hmenu");
+  m.innerHTML=`<button data-a="rename">✎ 重命名</button><button data-a="file">🗂 归档到课程…</button>
+    ${h.course?`<button data-a="unfile">↩ 移出「${esc(h.course)}」</button>`:""}<hr><button data-a="del" class="danger">删除这节课</button>`;
+  m.onclick=async e=>{ const a=e.target.closest("button")?.dataset.a; if(!a) return;
+    if(a==="rename"){ closePops(); startRename(folder); }
+    if(a==="file") openCourseMenu(folder, btn);
+    if(a==="unfile"){ closePops(); await api.set_course(folder, ""); refreshHistory(); toast("已移回「未归档」"); }
+    if(a==="del"){ closePops(); confirmDelete(h); }
+  };
+  placePop(m, btn);
+}
+function openCourseMenu(folder, btn){
+  const h=histList.find(x=>x.folder===folder);
+  const courses=[...new Set(histList.map(x=>x.course).filter(Boolean))];
+  const m=$("#hmenu");
+  m.innerHTML=`<div class="lbl">归档到课程</div>${courses.map(c=>`<button data-c="${esc(c)}" class="${c===h.course?"sel":""}">🗂 ${esc(c)}</button>`).join("")}
+    ${courses.length?"<hr>":""}<div class="lbl">新课程</div><input id="newCourse" placeholder="例如：微观经济学" maxlength="40">`;
+  m.onclick=async e=>{ const b=e.target.closest("button[data-c]"); if(b) await fileTo(folder, b.dataset.c); };
+  placePop(m, btn);
+  const inp=$("#newCourse"); inp.focus();
+  inp.onkeydown=async e=>{ if(e.key==="Enter" && inp.value.trim()) await fileTo(folder, inp.value.trim()); if(e.key==="Escape") closePops(); };
+}
+async function fileTo(folder, course){
+  closePops(); await api.set_course(folder, course); folded.delete(course);
+  await refreshHistory(); toast(`已归档到「${course}」`);
+}
+function startRename(folder){
+  const it=document.querySelector(`.hitem[data-f="${CSS.escape(folder)}"]`); if(!it) return;
+  const h=histList.find(x=>x.folder===folder), b=it.querySelector(".ht");
+  b.innerHTML=`<input class="ren" maxlength="60">`; const inp=b.querySelector("input"); inp.value=h.title; inp.focus(); inp.select();
+  let done=false;
+  const finish=async ok=>{ if(done) return; done=true; const v=inp.value.trim();
+    if(ok && v && v!==h.title){ await api.rename_session(folder, v); if(curMeta && curMeta.folder===folder){ curMeta.title=v; setStatus("正在查看："+v); } toast("已改名"); }
+    refreshHistory(); };
+  inp.onkeydown=e=>{ if(e.key==="Enter") finish(true); if(e.key==="Escape"){ e.stopPropagation(); finish(false); } };
+  inp.onblur=()=>finish(true); inp.onclick=e=>e.stopPropagation();
+}
+function confirmDelete(h){
+  const t=$("#toast"); t.className=""; t.innerHTML=`删除「${esc(h.title)}」？录音、文字和笔记都会删掉，不能恢复。<button>删除</button>`; t.style.display="block";
+  t.querySelector("button").style.background="var(--rec)";
+  t.querySelector("button").onclick=async ()=>{ t.style.display="none";
+    const ok=await api.delete_session(h.folder); if(!ok){ toast("删除失败（正在录音的课不能删）", true); return; }
+    if(summaryFolder===h.folder){ $("#segs").innerHTML=""; summaryText=""; summaryFolder=""; curMeta=null; renderSummary(); $("#empty").style.display=""; loadNotes(); setStatus("准备就绪"); }
+    refreshHistory(); toast("已删除"); };
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none", 8000);
 }
 async function openHistory(folder){
-  if(recording){ toast("正在录音，先停止再看历史"); return; }
+  if(recording){ toast("正在录音，先停止再看历史"); return false; }
   const s = await api.load_session(folder); viewing=s; showSession(s); closeDrawers(); showCost(s.usage);
   setStatus("正在查看：" + s.title); $("#title").value=""; if(s.summary) openSide();
+  return true;
 }
-function closeDrawers(){ $("#history").classList.remove("show"); $("#modal").classList.remove("show"); $("#scrim").classList.remove("show"); }
+function closeDrawers(){ $("#history").classList.remove("show"); $("#modal").classList.remove("show"); $("#scrim").classList.remove("show"); closePops(); }
 $("#histBtn").onclick=async ()=>{ await refreshHistory(); $("#history").classList.add("show"); $("#scrim").classList.add("show"); };
 $("#histClose").onclick=closeDrawers; $("#scrim").onclick=closeDrawers;
 $("#histFolder").onclick=()=>api.open_folder("");
@@ -787,7 +963,7 @@ $("#preview").onchange=e=>save({live_preview:e.target.checked});
 $("#bgSum").onchange=e=>save({background_summary:e.target.checked});
 $("#chooseDir").onclick=async ()=>{ S=await api.choose_sessions_dir(); fillSettings(); };
 $("#recBtn").onclick=toggleRec;
-document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawers(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ if($("#palette").classList.contains("show")) closePalette(); else closeDrawers(); } });
 
 /* ---------- AI 助教 & 笔记 ----------
    Each selected passage gets its own conversation window. The user keeps or drops each Q&A,
@@ -796,6 +972,7 @@ let notesFolder="", threads=new Map(), wins=new Map(), zTop=30;
 function fmtTs(text){ return text.replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g, (m,t)=>`<a class="ts" data-t="${t}">${t}</a>`); }
 function tsToSec(t){ return String(t).split(":").map(Number).reduce((a,b)=>a*60+b,0); }
 function jumpTo(t){
+  lastJump=Date.now();
   const target=tsToSec(t); let best=null, bd=1e9;
   document.querySelectorAll("#segs .seg").forEach(el=>{
     const d=Math.abs(tsToSec(el.querySelector(".t").textContent)-target); if(d<bd){bd=d;best=el;} });
@@ -815,6 +992,8 @@ function toastUndo(msg, undo){
   clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display="none", 6000);
 }
 
+// the guided tour's example class answers offline, so it works without a key
+function aiReady(){ return !!S.has_api_key || !!(curMeta && curMeta.demo && curMeta.folder===summaryFolder); }
 /* ----- notes data ----- */
 async function loadNotes(){
   const f=summaryFolder;
@@ -972,7 +1151,8 @@ function makeWin(t){
   return w;
 }
 function openThread(t, focus){
-  if(!S.has_api_key){ toast("AI 助教需要先在设置里填写 Claude API key", true); return null; }
+  hideTip();
+  if(!aiReady()){ toast("AI 助教需要先在设置里填写 Claude API key", true); return null; }
   let w=wins.get(t.id);
   if(!w) w=makeWin(t);
   w.el.classList.remove("min"); w.el.style.zIndex=++zTop;
@@ -1061,7 +1241,7 @@ async function newThread(anchor){
 }
 $("#aiBtn").onclick=async ()=>{
   if(wins.size){ for(const id of [...wins.keys()]) closeWin(id); return; }
-  if(!S.has_api_key){ toast("AI 助教需要先在设置里填写 Claude API key", true); return; }
+  if(!aiReady()){ toast("AI 助教需要先在设置里填写 Claude API key", true); return; }
   if(notesFolder!==summaryFolder) await loadNotes();
   // reopen the latest whole-class conversation, or start one
   const general=[...threads.values()].filter(t=>!t.anchor || !t.anchor.text).pop();
@@ -1095,7 +1275,7 @@ $("#selbar").addEventListener("click", async e=>{
   const a=e.target.dataset.a; if(!a || !selInfo) return;
   const info=selInfo; hideSel(); getSelection().removeAllRanges();
   if(a==="explain" || a==="ask"){
-    if(!S.has_api_key){ toast("AI 助教需要先在设置里填写 Claude API key", true); return; }
+    if(!aiReady()){ toast("AI 助教需要先在设置里填写 Claude API key", true); return; }
     const t=await newThread({where:info.where, text:info.text, seg_id:info.seg_id, t:info.t}); if(!t) return;
     openThread(t, a==="ask");
     if(a==="explain") sendThread(t.id, "");
@@ -1103,6 +1283,266 @@ $("#selbar").addEventListener("click", async e=>{
   if(a==="web") api.open_url("https://www.google.com/search?q="+encodeURIComponent(info.text));
   if(a==="copy"){ try{ await navigator.clipboard.writeText(info.text); }catch{ const t=document.createElement("textarea"); t.value=info.text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } toast("已复制"); }
 });
+
+/* ---------- search everything (Ctrl+K) ---------- */
+let palItems=[], palSel=0, palSeq=0;
+function openPalette(q){
+  closePops(); $("#palette").classList.add("show");
+  const inp=$("#palInput"); if(q!=null) inp.value=q; inp.focus(); inp.select(); runSearch();
+}
+function closePalette(){ $("#palette").classList.remove("show"); }
+$("#searchBtn").onclick=()=>openPalette();
+$("#palette").addEventListener("mousedown", e=>{ if(e.target.id==="palette") closePalette(); });
+document.addEventListener("keydown", e=>{
+  if((e.ctrlKey||e.metaKey) && (e.key==="k"||e.key==="K")){ e.preventDefault(); openPalette(); }
+}, true);
+function hl(text, terms, max){
+  text=String(text||"");
+  if(max && text.length>max){
+    const low=text.toLowerCase(); let i=Math.min(...terms.map(t=>{ const k=low.indexOf(t); return k<0? 1e9 : k; }));
+    if(i===1e9) i=0;
+    const a=Math.max(0, i-Math.floor(max/3)); text=(a?"…":"")+text.slice(a, a+max)+(a+max<text.length?"…":"");
+  }
+  let h=esc(text);
+  for(const t of terms){ if(!t) continue; h=h.replace(new RegExp(esc(t).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"), m=>`<mark>${m}</mark>`); }
+  return h;
+}
+let palTimer=null;
+$("#palInput").addEventListener("input", ()=>{ clearTimeout(palTimer); palTimer=setTimeout(runSearch, 140); });
+async function runSearch(){
+  const q=$("#palInput").value.trim(), box=$("#palResults"), seq=++palSeq;
+  if(!q){ palItems=[]; box.innerHTML=`<div class="pal-empty">输入关键词，搜索以前所有课的<b>英文原文、中文翻译、总结和笔记</b>。<br>例如：<kbd>elasticity</kbd> <kbd>弹性</kbd> <kbd>期中 考试</kbd></div>`; return; }
+  const res=await api.search(q); if(seq!==palSeq) return;
+  const terms=q.toLowerCase().split(/\s+/).filter(Boolean);
+  palItems=[]; let html="";
+  for(const g of res){
+    html+=`<div class="pg"><b>${hl(g.title, g.title_hit?terms:[])}</b>${g.course?`<span>🗂 ${esc(g.course)}</span>`:""}<span>${esc((g.started||"").slice(0,10))}</span>${g.count>g.hits.length?`<span>共 ${g.count} 处</span>`:""}</div>`;
+    const hits=g.hits.length? g.hits : [{kind:"title"}];
+    for(const h of hits){
+      const i=palItems.length; palItems.push({...h, folder:g.folder});
+      let k="", x="";
+      if(h.kind==="transcript"){ k="原文"; x=`<div>${hl(h.en, terms, 140)}</div>${h.zh?`<div class="z">${hl(h.zh, terms, 80)}</div>`:""}`; }
+      if(h.kind==="summary"){ k="总结"; x=hl(h.text, terms, 140); }
+      if(h.kind==="note"){ k="笔记"; x=`<div><b>${hl(h.key||"笔记", terms)}</b></div>${h.text?`<div class="z">「${hl(h.text, terms, 80)}」</div>`:""}`; }
+      if(h.kind==="title"){ k="课程"; x=`<span class="muted">打开这节课</span>`; }
+      html+=`<div class="pr" data-i="${i}"><span class="k${h.kind==="note"?" note":""}">${k}</span><div class="x">${x}</div>${h.kind==="transcript"?`<span class="ts2">${fmt(h.t)}</span>`:""}</div>`;
+    }
+  }
+  box.innerHTML = html || `<div class="pal-empty">没有找到「${esc(q)}」。换个词，或者用中文 / 英文再试试。</div>`;
+  palSel=0; markPal();
+}
+function markPal(){ document.querySelectorAll("#palResults .pr").forEach(el=>el.classList.toggle("sel", +el.dataset.i===palSel));
+  const el=document.querySelector(`#palResults .pr[data-i="${palSel}"]`); if(el) el.scrollIntoView({block:"nearest"}); }
+$("#palInput").addEventListener("keydown", e=>{
+  if(e.key==="ArrowDown"){ e.preventDefault(); palSel=Math.min(palItems.length-1, palSel+1); markPal(); }
+  if(e.key==="ArrowUp"){ e.preventDefault(); palSel=Math.max(0, palSel-1); markPal(); }
+  if(e.key==="Enter" && !e.isComposing && palItems[palSel]){ e.preventDefault(); openResult(palItems[palSel]); }
+  if(e.key==="Escape"){ e.stopPropagation(); closePalette(); }
+});
+$("#palResults").addEventListener("mousemove", e=>{ const r=e.target.closest(".pr"); if(r && +r.dataset.i!==palSel){ palSel=+r.dataset.i; markPal(); } });
+$("#palResults").addEventListener("click", e=>{ const r=e.target.closest(".pr"); if(r) openResult(palItems[+r.dataset.i]); });
+function flashEl(el){ if(!el) return; autoScroll=false; el.scrollIntoView({block:"center", behavior:"smooth"}); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+async function openResult(h){
+  closePalette(); lastOpened=Date.now();
+  if(h.folder!==summaryFolder){ if(!(await openHistory(h.folder))) return; }
+  if(h.kind==="transcript") setTimeout(()=>flashEl(document.querySelector(`.seg[data-id="${h.seg_id}"]`)), 60);
+  if(h.kind==="summary"){ openSide(); setTimeout(()=>{ const want=h.text.replace(/\[\d.*?\]/g,"").trim().slice(0,24);
+    const el=[...$("#sumBody").querySelectorAll("li,p,h2,h3")].find(x=>x.textContent.includes(want)); flashEl(el); }, 60); }
+  if(h.kind==="note"){ if(notesFolder!==summaryFolder) await loadNotes(); const t=threads.get(h.tid); if(t) openThread(t); }
+}
+
+/* ---------- guided tour ----------
+   Coach marks over the real interface: the area being explained is lit up, a small card explains it,
+   and for hands-on steps the card waits until the user has done it (or does it for them).
+   Everything runs on a built-in example class, so nothing is recorded and no key is needed. */
+const TOUR={on:false, steps:[], i:0, t0:0, tick:null, demo:null, tid:null, name:"", full:false};
+const tq = t => typeof t==="function"? t() : (t? document.querySelector(t) : null);
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+let lastJump=0, lastOpened=0;
+async function ensureDemo(){
+  if(!TOUR.demo) TOUR.demo = await api.demo_session();
+  if(summaryFolder!==TOUR.demo.folder){
+    const s=await api.load_session(TOUR.demo.folder); viewing=s; showSession(s); showCost(null);
+    setStatus("正在查看：示例课（引导用）");
+  }
+}
+function demoSeg(id){ return document.querySelector(`.seg[data-id="${id}"]`); }
+function selectPhrase(id, phrase){
+  const en=demoSeg(id)?.querySelector(".en"); if(!en) return;
+  const w=document.createTreeWalker(en, NodeFilter.SHOW_TEXT); let n;
+  while((n=w.nextNode())){ const k=n.nodeValue.indexOf(phrase); if(k>=0){
+    const r=document.createRange(); r.setStart(n,k); r.setEnd(n,k+phrase.length);
+    const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    demoSeg(id).scrollIntoView({block:"center"});
+    document.dispatchEvent(new MouseEvent("mouseup",{bubbles:true})); return; } }
+}
+function tourWin(){ return TOUR.tid? wins.get(TOUR.tid)?.el : null; }
+function tourThread(){ return TOUR.tid? threads.get(TOUR.tid) : null; }
+function demoItem(){ return TOUR.demo? document.querySelector(`.hitem[data-f="${CSS.escape(TOUR.demo.folder)}"]`) : null; }
+function demoHist(){ return TOUR.demo? histList.find(x=>x.folder===TOUR.demo.folder) : null; }
+async function typeInto(inp, text){ inp.focus(); inp.value=""; for(const ch of text){ inp.value+=ch; inp.dispatchEvent(new Event("input")); await sleep(160); } }
+
+const CHAPTERS = {
+  start: {name:"开始上课", steps:[
+    {target:"#source", title:"第一步：选声音从哪来", text:"老师现场讲课选 <b>麦克风</b>；网课、Zoom、视频选 <b>电脑声音</b>，比用麦克风收外放清楚得多。"},
+    {target:"#title", title:"课程名称（可选）", text:"写上名字，以后在历史里更好找。不写也没关系，课后随时可以改。"},
+    {target:"#recBtn", title:"点「开始」就开始同传", text:"英文会一个词一个词地出来，中文跟在下面。下课再点一次 <b>停止</b>，录音、文字会自动保存。"},
+    {target:()=>$("#viewMode").parentElement.querySelector("#viewMode"), title:"看着累？调一下", text:"底部可以切换 <b>双语 / 中文 / 英文</b>，旁边的 <b>A- A+</b> 调字号。"},
+  ]},
+  summary: {name:"课堂总结", steps:[
+    {before:async()=>{ await ensureDemo(); closeSide(); }, target:"#transcript", title:"这是一节示例课",
+     text:"为了让你马上体验，这里放了一节 1 分半钟的示例课。真正上课时，这里就是实时出来的英文和中文。"},
+    {target:"#sumBtn", title:"下课后看「总结」", text:"AI 会把整节课整理成笔记：主题、要点、术语、作业和考试提醒。",
+     tryText:"点一下右上角的「总结」", done:()=>!$("#side").classList.contains("hidden"), doIt:()=>openSide()},
+    {target:"#sumBody", title:"总结长这样", text:"按主题分好的要点，后面都带着时间点；最下面还有可能考到的点和复习建议。"},
+    {target:()=>$("#sumBody a.ts"), title:"时间点可以点", text:"每个要点后面的时间点，点一下就跳回原文里那句话。",
+     tryText:"点一下这个时间点", done:()=>lastJump>TOUR.t0, doIt:()=>$("#sumBody a.ts").click()},
+  ]},
+  notes: {name:"AI 笔记", steps:[
+    {before:async()=>{ await ensureDemo(); for(const id of [...wins.keys()]) closeWin(id, true); demoSeg(3)?.scrollIntoView({block:"center"}); },
+     target:()=>demoSeg(3), title:"选中就能问 AI", text:"英文原文、中文翻译、总结里的文字都可以：用鼠标 <b>拖选</b> 一段，就会出现小工具条。",
+     tryText:"选中这句里的 <b>price elasticity of demand</b>", done:()=>$("#selbar").classList.contains("show"),
+     doIt:()=>selectPhrase(3, "price elasticity of demand")},
+    {target:"#selbar", title:"点「AI 解释」", text:"AI 会结合这节课来解释。想问别的就点「问 AI…」。<br><span class=\"muted\">示例课里的回答是提前准备好的，不花钱。</span>",
+     tryText:"点黑色工具条上的「AI 解释」", done:()=>{ const id=[...wins.keys()].pop(); if(id){ TOUR.tid=id; return true; } },
+     doIt:()=>$('#selbar button[data-a="explain"]').click()},
+    {target:tourWin, place:"left", title:"每段内容一个小窗口", text:"可以接着追问；窗口能拖动、缩小，不挡着看原文。",
+     tryText:"等回答出来…", done:()=>tourThread()?.turns.length>=1, quiet:true},
+    {target:()=>tourWin()?.querySelector(".chat-foot"), place:"left", title:"接着追问", text:"在这里输入问题，回车发送。",
+     tryText:"随便问一句，比如“怎么快速判断？”", done:()=>tourThread()?.turns.length>=2,
+     doIt:()=>sendThread(TOUR.tid, "怎么快速判断有没有弹性？")},
+    {before:async()=>{ for(let k=0;k<40 && wins.get(TOUR.tid)?.busy;k++) await sleep(100); },
+     target:()=>{ const l=tourWin()?.querySelectorAll(".turnmeta label"); return l && l[l.length-1]; }, place:"left",
+     title:"每轮问答，自己决定留不留", text:"取消勾选 <b>保留</b>，这轮问答就不会进笔记。比如刚才那句追问，不想留就把勾去掉。"},
+    {target:()=>tourWin()?.querySelector(".star"), place:"left", title:"存为笔记", text:"觉得有用，就点 <b>☆ 存为笔记</b>。<br>不存的话，关窗口时这段对话会被丢弃（可以撤销）；垃圾桶按钮是直接删除。",
+     tryText:"点「☆ 存为笔记」", done:()=>!!tourThread()?.saved, doIt:()=>toggleSaved(TOUR.tid)},
+    {target:()=>tourWin()?.querySelector(".keybar2"), place:"left", title:"一句话要点", text:"存下来后，AI 会把这条笔记提炼成一句话，你也可以直接点进去改。",
+     tryText:"正在提炼要点…", done:()=>!!tourThread()?.key, quiet:true},
+    {target:()=>tourWin()?.querySelector(".cl"), place:"left", title:"先收起来", text:"点 ✕ 收起窗口。存成笔记的不会丢。",
+     tryText:"点窗口右上角的 ✕", done:()=>!tourWin(), doIt:()=>closeWin(TOUR.tid)},
+    {before:async()=>{ await sleep(100); demoSeg(3)?.scrollIntoView({block:"center"}); },
+     target:()=>document.querySelector(`.nmark[data-tid="${TOUR.tid}"]`), title:"原文里多了一条橙色虚线", text:"这就是你的笔记。鼠标放上去，就能看到它的要点。",
+     tryText:"把鼠标移到橙色虚线上", done:()=>tip.style.display==="block",
+     doIt:()=>document.querySelector(`.nmark[data-tid="${TOUR.tid}"]`)?.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}))},
+    {target:()=>document.querySelector(`.nmark[data-tid="${TOUR.tid}"]`), title:"点一下，打开复习", text:"点虚线就能重新打开这条笔记，复习或者接着问。",
+     tryText:"点橙色虚线", done:()=>!!tourWin(),
+     doIt:()=>{ getSelection().removeAllRanges(); hideTip(); openThread(tourThread()); }},
+  ]},
+  history: {name:"历史与归档", steps:[
+    {before:async()=>{ await ensureDemo(); for(const id of [...wins.keys()]) closeWin(id, true); closePalette(); },
+     target:"#histBtn", title:"每节课都在「历史」里", text:"下课后自动保存。点开就能看到以前所有的课。",
+     tryText:"点「历史」", done:()=>$("#history").classList.contains("show"), doIt:()=>$("#histBtn").click()},
+    {before:async()=>{ await sleep(250); }, target:()=>demoItem()?.querySelector(".more"), title:"随时改名、归档", text:"每节课右边的 <b>⋯</b>：可以 <b>重命名</b>、<b>归档到课程</b>，或删除。",
+     tryText:"点示例课右边的 ⋯", done:()=>$("#hmenu").classList.contains("show"), doIt:()=>demoItem()?.querySelector(".more").click()},
+    {target:"#hmenu", title:"归档到课程", text:"把课按课程放进文件夹，比如「微观经济学」「CS50」。以后一门课的所有记录都在一起。",
+     tryText:"点「归档到课程…」，输入一个课程名回车（或者选已有的）", done:()=>!!demoHist()?.course,
+     doIt:()=>fileTo(TOUR.demo.folder, "示例课程")},
+    {before:async()=>{ await sleep(150); }, target:()=>{ const c=demoHist()?.course; return c? document.querySelector(`.hgroup[data-c="${CSS.escape(c)}"]`) : null; },
+     place:"right", title:"按课程分好了", text:"点课程名可以折叠、展开。改名也一样：⋯ → 重命名，改完回车。",
+     after:()=>closeDrawers()},
+  ]},
+  search: {name:"搜索", steps:[
+    {before:async()=>{ await ensureDemo(); closeDrawers(); }, target:"#searchBtn", title:"想找以前讲过的内容？", text:"点这里，或者在任何时候按 <kbd>Ctrl</kbd> <kbd>K</kbd>。",
+     tryText:"点搜索框", done:()=>$("#palette").classList.contains("show"), doIt:()=>openPalette("")},
+    {target:".pal-box", title:"输入关键词", text:"所有课的英文原文、中文翻译、总结和你的笔记都会被搜到，中英文都行。",
+     tryText:"输入 <b>弹性</b> 或 <b>elastic</b>", done:()=>palItems.length>0 && $("#palInput").value.trim().length>=2,
+     doIt:()=>typeInto($("#palInput"), "弹性")},
+    {target:"#palResults", title:"回车或点击打开", text:"会直接跳到那节课的那句话；如果是笔记，会打开那条笔记。",
+     tryText:"点一条结果", done:()=>lastOpened>TOUR.t0, doIt:()=>{ if(palItems[0]) openResult(palItems[0]); }},
+  ]},
+};
+const FULL=["start","summary","notes","history","search"];
+
+function startTour(which){
+  closePops();
+  if(recState!=="idle"){ toast("正在录音，停止后再看引导"); return; }
+  TOUR.full = which==="all";
+  const keys = TOUR.full? FULL : [which];
+  TOUR.steps=[]; for(const k of keys) for(const st of CHAPTERS[k].steps) TOUR.steps.push({...st, chapter:CHAPTERS[k].name});
+  if(TOUR.full) TOUR.steps.push({final:true, title:"都会了 🎉", text:`示例课留在历史的「${esc(demoHist()?.course||"示例课程")}」里，可以随时删掉。<br>想再看引导，点右上角的 <b>引导</b>。`});
+  TOUR.demo=null; TOUR.tid=null; TOUR.on=true; document.body.classList.add("touring");
+  $("#tourLayer").classList.add("show");
+  clearInterval(TOUR.tick); TOUR.tick=setInterval(tourFrame, 120);
+  showStep(0);
+  if(!S.tour_done) save({tour_done:true});
+}
+async function showStep(i){
+  const prev=TOUR.steps[TOUR.i]; if(prev && prev.after && i>TOUR.i) prev.after();
+  TOUR.i=i; const st=TOUR.steps[i];
+  if(!st){ endTour(true); return; }
+  TOUR.t0=Date.now(); TOUR.busy=true; hideTip();
+  const card=$("#tourCard"); card.style.opacity=".0";
+  try{ if(st.before) await st.before(); }catch(e){ console.error(e); }
+  TOUR.busy=false; if(TOUR.i!==i || !TOUR.on) return;
+  const inCh=TOUR.steps.filter(x=>x.chapter===st.chapter), k=inCh.indexOf(st);
+  const wait=!!st.done, last=i===TOUR.steps.length-1;
+  card.innerHTML=`<h4>${st.title}${st.final?"":`<small>${esc(st.chapter)} · ${k+1}/${inCh.length}</small>`}</h4><div class="tt">${st.text}</div>
+    ${wait?`<div class="try">👉 ${st.tryText}</div>`:""}
+    <div class="tf">${st.final?"":`<button class="link" data-a="exit">退出引导</button>`}<span class="grow"></span>
+    ${st.final&&TOUR.demo?`<button class="btn" data-a="deldemo">删除示例课</button>`:""}
+    ${wait? (st.doIt?`<button class="btn" data-a="do">帮我操作一下</button>`:"") : `<button class="btn primary" data-a="next">${last?"完成":"下一步"}</button>`}</div>`;
+  card.onclick=async e=>{ const a=e.target.closest("button")?.dataset.a; if(!a) return;
+    if(a==="exit") endTour(false);
+    if(a==="next") showStep(TOUR.i+1);
+    if(a==="do"){ e.target.disabled=true; try{ await st.doIt(); }catch(err){ console.error(err); } }
+    if(a==="deldemo"){ await api.delete_session(TOUR.demo.folder); if(summaryFolder===TOUR.demo.folder){ $("#segs").innerHTML=""; summaryText=""; summaryFolder=""; curMeta=null; renderSummary(); $("#empty").style.display=""; loadNotes(); closeSide(); setStatus("准备就绪"); } endTour(true); }
+  };
+  tourFrame(); card.style.opacity="1";
+}
+function tourFrame(){
+  if(!TOUR.on || TOUR.busy) return;
+  const st=TOUR.steps[TOUR.i]; if(!st) return;
+  if(st.done && Date.now()-TOUR.t0>350 && st.done()){ TOUR.busy=true; setTimeout(()=>{ TOUR.busy=false; if(TOUR.steps[TOUR.i]===st) showStep(TOUR.i+1); }, 450); return; }
+  const hole=$("#tourHole"), card=$("#tourCard"), t=st.final? null : tq(st.target);
+  const r = t && t.getClientRects().length ? t.getBoundingClientRect() : null;
+  hole.classList.toggle("act", !!st.done && !st.quiet);
+  if(!r || r.width===0){ hole.classList.add("none"); card.classList.add("center"); return; }
+  hole.classList.remove("none"); card.classList.remove("center");
+  const pad=6, x=Math.max(4,r.left-pad), y=Math.max(4,r.top-pad), w=Math.min(innerWidth-8, r.width+pad*2), h=Math.min(innerHeight-8, r.height+pad*2);
+  Object.assign(hole.style, {left:x+"px", top:y+"px", width:w+"px", height:h+"px"});
+  const cw=card.offsetWidth, ch=card.offsetHeight, m=12;
+  const room={bottom:innerHeight-(y+h), top:y, right:innerWidth-(x+w), left:x};
+  let place=st.place;
+  if(!place || room[place] < (place==="left"||place==="right"? cw : ch)+m*2)
+    place = room.bottom>=ch+m*2? "bottom" : room.top>=ch+m*2? "top" : room.left>=cw+m*2? "left" : room.right>=cw+m*2? "right" : "inside";
+  let cx, cy;
+  if(place==="bottom"){ cx=x+w/2-cw/2; cy=y+h+m; }
+  if(place==="top"){ cx=x+w/2-cw/2; cy=y-ch-m; }
+  if(place==="left"){ cx=x-cw-m; cy=y+h/2-ch/2; }
+  if(place==="right"){ cx=x+w+m; cy=y+h/2-ch/2; }
+  if(place==="inside"){ cx=innerWidth-cw-16; cy=innerHeight-ch-16; }
+  card.style.left=Math.min(Math.max(12,cx), innerWidth-cw-12)+"px";
+  card.style.top=Math.min(Math.max(12,cy), innerHeight-ch-12)+"px";
+}
+function endTour(finished){
+  TOUR.on=false; clearInterval(TOUR.tick); document.body.classList.remove("touring");
+  $("#tourLayer").classList.remove("show"); $("#tourCard").innerHTML="";
+  if(finished && !TOUR.steps[TOUR.steps.length-1]?.final) toast("这部分学会了 ✓");
+}
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && TOUR.on && !$("#palette").classList.contains("show")) endTour(false); });
+addEventListener("resize", ()=>{ if(TOUR.on) tourFrame(); });
+$("#tourBtn").onclick=()=>{
+  const m=$("#tourMenu");
+  if(m.classList.contains("show")){ closePops(); return; }
+  closePops();
+  m.innerHTML=`<div class="lbl">新手引导 · 跟着做一遍</div>
+    <button data-c="all">▶ 完整走一遍<small>约 3 分钟</small></button><hr>
+    ${FULL.map((k,i)=>`<button data-c="${k}">${i+1}. ${CHAPTERS[k].name}<small>${CHAPTERS[k].steps.length} 步</small></button>`).join("")}`;
+  m.onclick=e=>{ const c=e.target.closest("button")?.dataset.c; if(c) startTour(c); };
+  placePop(m, $("#tourBtn"));
+};
+function welcome(){
+  // first launch: offer the tour once
+  TOUR.on=true; TOUR.steps=[{final:true, title:"欢迎使用课堂同传 👋", text:"花 3 分钟跟着做一遍：怎么开始上课、看总结、用 AI 做笔记、整理和搜索以前的课。<br><span class=\"muted\">用的是一节示例课，不会录音，也不花钱。</span>"}];
+  TOUR.i=0; $("#tourLayer").classList.add("show");
+  const card=$("#tourCard"); card.classList.add("center"); $("#tourHole").classList.add("none");
+  card.innerHTML=`<h4>${TOUR.steps[0].title}</h4><div class="tt">${TOUR.steps[0].text}</div>
+    <div class="tf"><button class="link" data-a="later">以后再说</button><span class="grow"></span><button class="btn primary" data-a="go">开始引导</button></div>`;
+  card.style.opacity="1";
+  card.onclick=e=>{ const a=e.target.closest("button")?.dataset.a; if(!a) return;
+    TOUR.on=false; $("#tourLayer").classList.remove("show"); save({tour_done:true});
+    if(a==="go") startTour("all"); else toast("想看的时候，点右上角的「引导」"); };
+}
 
 /* ---------- boot ---------- */
 async function boot(){
@@ -1113,6 +1553,7 @@ async function boot(){
   if(S.source && r.sources.some(s=>s.id===S.source)) $("#source").value=S.source;
   $("#about").textContent = `课堂同传 v${r.version} · 语音识别与翻译在本机离线运行`;
   applyView(); renderSummary(); pollLoop();
+  if(!S.tour_done) setTimeout(welcome, 400);
 }
 window.addEventListener("pywebviewready", boot);
 </script>

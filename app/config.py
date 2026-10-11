@@ -6,7 +6,7 @@ from pathlib import Path
 
 APP_NAME = "ClassInterpreter"
 APP_TITLE = "课堂同传"
-VERSION = "0.6.5"
+VERSION = "0.7.0"
 
 
 def resource_dir() -> Path:
@@ -56,6 +56,7 @@ DEFAULTS = {
     "display_mode": "both",        # both | zh | en
     "font_size": 20,
     "source": "",                  # last used audio device id
+    "tour_done": False,            # the guided tour was offered / finished
 }
 
 

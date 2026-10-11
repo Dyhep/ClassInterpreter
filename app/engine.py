@@ -35,6 +35,8 @@ class Session:
         self.duration = 0.0
         self.usage = {}
         self.audio = ""      # recording of the class (file name in the folder, or a full path for imports)
+        self.course = ""     # archive folder ("" = not archived yet)
+        self.demo = False    # the built-in example class of the guided tour
 
     @classmethod
     def new(cls, root: Path, title: str):
@@ -53,6 +55,8 @@ class Session:
         s.duration = d.get("duration", 0.0)
         s.usage = d.get("usage", {})
         s.audio = d.get("audio", "")
+        s.course = d.get("course", "")
+        s.demo = bool(d.get("demo"))
         return s
 
     def audio_path(self):
@@ -65,7 +69,7 @@ class Session:
     def to_dict(self):
         return {"title": self.title, "started": self.started, "duration": self.duration,
                 "segments": self.segments, "summary": self.summary, "folder": str(self.folder),
-                "usage": self.usage, "audio": self.audio,
+                "usage": self.usage, "audio": self.audio, "course": self.course, "demo": self.demo,
                 "has_audio": bool(self.audio_path())}
 
     def save(self):
@@ -785,6 +789,10 @@ class Engine:
             return
         key = notes.fallback_key(t)
         api_key = self.settings.get("api_key")
+        if session is not None and session.demo:
+            import demo
+            key, api_key = demo.key_point(t), None
+            time.sleep(0.6)
         if api_key and any(x.get("keep", True) for x in t["turns"]):
             u = {}
             try:
@@ -810,10 +818,12 @@ class Engine:
         import assistant
         import notes
         key = self.settings.get("api_key")
+        f, session = self._folder(folder)
+        if session is not None and session.demo:
+            return self._ask_demo(f, tid, question, mid)
         if not key:
             self.emit("chat_error", mid=mid, tid=tid, text="AI 助教需要先在设置里填写 Claude API key")
             return
-        f, session = self._folder(folder)
         if session is None or not session.segments:
             self.emit("chat_error", mid=mid, tid=tid, text="这节课还没有内容可以问")
             return
@@ -865,6 +875,49 @@ class Engine:
         idx = notes.mutate(f, fn)
         self.emit("chat_done", mid=mid, tid=tid, idx=idx, text=answer, sources=sources, usd=usd)
 
+    def _ask_demo(self, f, tid, question, mid):
+        """The example class answers with prepared explanations: free, offline, instant."""
+        import demo
+        import notes
+        thread = notes.find(notes.load(f), tid)
+        if thread is None:
+            self.emit("chat_error", mid=mid, tid=tid, text="找不到这条对话")
+            return
+        question = (question or "").strip()
+        first = not thread["turns"]
+        time.sleep(0.5)
+        text = demo.stream(demo.answer(thread["anchor"].get("text", ""), question, first),
+                           lambda t: self.emit("chat_text", mid=mid, tid=tid, text=t))
+        turn = {"q": question or "请解释这段内容", "a": text, "sources": [], "usd": 0.0, "web": False, "keep": True}
+
+        def fn(ts):
+            t = notes.find(ts, tid)
+            if t is not None:
+                t["turns"].append(turn)
+                return len(t["turns"]) - 1
+            return -1
+        idx = notes.mutate(f, fn)
+        self.emit("chat_done", mid=mid, tid=tid, idx=idx, text=text, sources=[], usd=0.0)
+
+    def demo_session(self):
+        """The guided tour's example class (created fresh each time the tour starts)."""
+        import demo
+        import shutil
+        root = self.settings.sessions_dir()
+        for f in root.glob("*/data.json"):
+            try:
+                if json.loads(f.read_text(encoding="utf-8")).get("demo"):
+                    shutil.rmtree(f.parent, ignore_errors=True)
+            except Exception:
+                pass
+        s = Session.new(root, demo.TITLE)
+        s.demo = True
+        s.segments = demo.segments()
+        s.summary = demo.SUMMARY
+        s.duration = s.segments[-1]["t"] + 8
+        s.save()
+        return s.to_dict()
+
     # ---------- history ----------
     def list_sessions(self):
         out = []
@@ -874,6 +927,7 @@ class Engine:
                 out.append({"folder": str(f.parent), "title": d.get("title"), "started": d.get("started"),
                             "duration": d.get("duration", 0), "count": len(d.get("segments", [])),
                             "has_summary": bool(d.get("summary")),
+                            "course": d.get("course", ""), "demo": bool(d.get("demo")),
                             "usd": (d.get("usage") or {}).get("usd", 0)})
             except Exception:
                 pass
@@ -883,12 +937,81 @@ class Engine:
         return Session.load(Path(folder)).to_dict()
 
     def rename_session(self, folder, title):
-        s = Session.load(Path(folder))
-        s.title = title or s.title
+        s = self._live_or_load(folder)
+        s.title = (title or "").strip()[:60] or s.title
         s.save()
-        if self.session and self.session.folder == s.folder:
-            self.session.title = s.title
         return s.to_dict()
+
+    def set_course(self, folder, course):
+        """File a class under a course (archive folder); "" takes it out again."""
+        s = self._live_or_load(folder)
+        s.course = (course or "").strip()[:40]
+        s.save()
+        return s.to_dict()
+
+    def _live_or_load(self, folder):
+        if self.session is not None and self.session.folder == Path(folder):
+            return self.session
+        return Session.load(Path(folder))
+
+    def search(self, query, limit=80):
+        """Find text across every class: transcript (English and Chinese), summary, notes, titles.
+        All words of the query must appear in the same sentence / note / summary line."""
+        import notes
+        terms = [t for t in (query or "").lower().split() if t]
+        if not terms:
+            return []
+
+        def hit(text):
+            low = (text or "").lower()
+            return all(t in low for t in terms)
+
+        out, total = [], 0
+        for f in sorted(self.settings.sessions_dir().glob("*/data.json"), reverse=True):
+            try:
+                d = self._search_doc(f)
+            except Exception:
+                continue
+            hits = []
+            for sg in d.get("segments", []):
+                if hit(sg.get("en")) or hit(sg.get("zh")) or hit((sg.get("en") or "") + " " + (sg.get("zh") or "")):
+                    hits.append({"kind": "transcript", "seg_id": sg.get("id"), "t": sg.get("t", 0),
+                                 "en": sg.get("en", ""), "zh": sg.get("zh", "")})
+            for line in (d.get("summary") or "").splitlines():
+                if line.strip() and hit(line):
+                    hits.append({"kind": "summary", "text": line.strip().lstrip("-#* ").strip()})
+            try:
+                for th in notes.load(str(f.parent)):
+                    if not th.get("saved"):
+                        continue
+                    blob = " ".join([th.get("key", ""), (th.get("anchor") or {}).get("text", "")] +
+                                    [x.get("q", "") + " " + x.get("a", "") for x in th.get("turns", []) if x.get("keep", True)])
+                    if hit(blob):
+                        hits.append({"kind": "note", "tid": th["id"], "key": th.get("key", ""),
+                                     "text": (th.get("anchor") or {}).get("text", "")})
+            except Exception:
+                pass
+            title_hit = hit(d.get("title", "")) or hit(d.get("course", ""))
+            if hits or title_hit:
+                total += len(hits)
+                out.append({"folder": str(f.parent), "title": d.get("title", ""), "course": d.get("course", ""),
+                            "started": d.get("started", ""), "demo": bool(d.get("demo")),
+                            "title_hit": title_hit, "count": len(hits), "hits": hits[:12]})
+            if total >= limit:
+                break
+        return out
+
+    _doc_cache = {}
+
+    def _search_doc(self, f):
+        """data.json contents, re-read only when the file changed."""
+        m = f.stat().st_mtime
+        c = self._doc_cache.get(str(f))
+        if c and c[0] == m:
+            return c[1]
+        d = json.loads(f.read_text(encoding="utf-8"))
+        self._doc_cache[str(f)] = (m, d)
+        return d
 
     def delete_session(self, folder):
         import shutil

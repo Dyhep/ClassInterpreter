@@ -115,6 +115,15 @@ class Api:
     def rename_session(self, folder, title):
         return self._e.rename_session(folder, title)
 
+    def set_course(self, folder, course):
+        return self._e.set_course(folder, course)
+
+    def search(self, query):
+        return self._e.search(query)
+
+    def demo_session(self):
+        return self._e.demo_session()
+
     def delete_session(self, folder):
         return self._e.delete_session(folder)
 

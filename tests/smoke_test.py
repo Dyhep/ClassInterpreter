@@ -148,6 +148,39 @@ def check_cloud_tiers():
     cloud.API_URL = "https://api.anthropic.com/v1/messages"
 
 
+def check_library():
+    """Guided-tour example class, archiving into courses, renaming and searching everything."""
+    e = engine.Engine()
+    d = e.demo_session()
+    f = d["folder"]
+    assert d["demo"] and d["summary"] and len(d["segments"]) > 10
+    e.set_course(f, "经济学")
+    e.rename_session(f, "第3周 需求弹性")
+    h = [x for x in e.list_sessions() if x["folder"] == f][0]
+    assert h["course"] == "经济学" and h["title"] == "第3周 需求弹性", h
+    # the example class answers offline, without a key
+    e.settings.update({"api_key": ""})
+    t = e.note_new(f, {"where": "transcript", "text": "price elasticity of demand", "seg_id": 3, "t": 17})
+    e.ask(f, t["id"], "", False, "demo1")
+    t0 = time.time()
+    while not any(x.get("mid") == "demo1" and x["kind"] == "chat_done" for x in e.events):
+        assert time.time() - t0 < 20, "demo answer missing"
+        time.sleep(0.05)
+    e.note_update(f, t["id"], {"saved": True})
+    t0 = time.time()
+    while not any(x["kind"] == "note_key" for x in e.events):
+        assert time.time() - t0 < 20, "demo key point missing"
+        time.sleep(0.05)
+    kinds = lambda q: sorted({h["kind"] for g in e.search(q) for h in g["hits"]})
+    assert "transcript" in kinds("elasticity demand"), "transcript search"
+    assert "summary" in kinds("第五章"), "summary search"
+    assert "note" in kinds("敏感程度"), "note search"
+    assert e.search("经济学")[0]["title_hit"], "course search"
+    assert not e.search("zzzz nothing"), "false hit"
+    assert e.delete_session(f)
+    print("  example class, courses, rename, search: ok")
+
+
 def check_summary(e):
     print("summary (local)…")
     t = time.time()
@@ -160,6 +193,8 @@ def check_summary(e):
 if __name__ == "__main__":
     print("translate…")
     check_translate()
+    print("library…")
+    check_library()
     print("cloud tiers (fake server)…")
     check_cloud_tiers()
     wav = os.environ.get("TEST_WAV")
