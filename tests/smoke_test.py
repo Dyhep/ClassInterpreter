@@ -84,6 +84,10 @@ def check_cloud_tiers():
         e.tr_q.join()
         segs = e.session.segments
         assert all(s["zh"] for s in segs), f"{tier}: untranslated {segs}"
+        assert not any("英文校对" in s["zh"] for s in segs), f"{tier}: proofreading leaked into Chinese"
+        fixed = [s for s in segs if s.get("en_asr")]
+        assert fixed and all(s["en"] != s["en_asr"] for s in fixed), f"{tier}: English not proofread {segs}"
+        assert any(x["kind"] == "en_fixed" for x in e.events), f"{tier}: no en_fixed event"
         assert e.usage["requests"] > 0 and e.usage["in"] > 0, f"{tier}: usage not counted"
         result[tier] = dict(e.usage)
         print(f"  {tier}: {e.usage}")
@@ -154,6 +158,17 @@ def check_cloud_tiers():
     cloud.API_URL = "https://api.anthropic.com/v1/messages"
 
 
+def check_proofread_rules():
+    from translate import accept_fix, zh_part
+    assert accept_fix("So question has an answer", "So the question is, has an answer")
+    assert accept_fix("modifies your mood tomorrow", "modifies your code tomorrow")
+    assert not accept_fix("The ability in code to do something again", "Being able to repeat things is useful")
+    assert not accept_fix("your code is correct", "your code is correct.")      # no real change
+    assert not accept_fix("some of it your fault", "有些是你的错")
+    assert zh_part("有些是你的错。\n英文校") == "有些是你的错。"
+    print("  proofreading rules: ok")
+
+
 def check_library():
     """Guided-tour example class, archiving into courses, renaming and searching everything."""
     e = engine.Engine()
@@ -199,6 +214,8 @@ def check_summary(e):
 if __name__ == "__main__":
     print("translate…")
     check_translate()
+    print("proofreading…")
+    check_proofread_rules()
     print("library…")
     check_library()
     print("cloud tiers (fake server)…")

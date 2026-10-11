@@ -13,6 +13,11 @@ def fake_zh(en):
     n = max(2, int(len(en.split()) * 1.7))
     return ("译" * n)[:n] + "。"
 
+def fake_fix(en):
+    """'Proofread' English: put back one missed small word."""
+    w = en.split()
+    return " ".join(w[:1] + ["the"] + w[1:]) if len(w) >= 3 else en
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     CACHE = set()
@@ -52,8 +57,12 @@ class H(BaseHTTPRequestHandler):
             out = "我准备好接收英文语音转写内容。请提供编号的英文文本，我将逐句译成简体中文。请粘贴需要翻译的内容"
         elif lines:
             out = "\n".join(f"{l.split('.',1)[0]}. {fake_zh(l.split('.',1)[1])}" for l in lines)
+            if "英文校对" in system:
+                out += "\n英文校对：\n" + "\n".join(f"{l.split('.',1)[0]}. {fake_fix(l.split('.',1)[1].strip())}" for l in lines)
         else:
             out = fake_zh(body.strip())
+            if "英文校对" in system:
+                out += "\n英文校对：" + fake_fix(body.strip())
         tout = ntok(out)
         if not req.get("stream"):
             time.sleep(FIRST_TOKEN + tout / TOK_PER_S)

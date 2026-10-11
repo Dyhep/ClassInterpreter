@@ -431,8 +431,11 @@ class Engine:
         if key and self.settings.get("use_cloud_translate"):
             from translate import CloudTranslator
             topic = self.session.title if self.session else ""
-            return CloudTranslator(key, self.settings.get("cloud_model"), topic)
+            return CloudTranslator(key, self.settings.get("cloud_model"), topic, proofread=self._proof())
         return self._local_translator()
+
+    def _proof(self):
+        return bool(self.settings.get("proofread_en"))
 
     def _local_translator(self):
         with self._tr_lock:
@@ -456,10 +459,23 @@ class Engine:
             return []
         return [x["en"] for x in self.session.segments[max(0, seg_id - n):seg_id]]
 
-    def _finish(self, seg, zh):
+    def _finish(self, seg, zh, fixed=None):
         seg["zh"] = zh
         self.emit("translated", id=seg["id"], zh=zh)
+        self._apply_fix(seg, fixed, emit=True)
         self._dirty = True
+
+    def _apply_fix(self, seg, fixed, emit=False):
+        """Use Claude's proofread English if it is only a small correction (missed small words,
+        clearly misheard words); the recognizer's own text is kept in en_asr."""
+        from translate import accept_fix
+        en = accept_fix(seg["en"], fixed) if fixed else None
+        if not en:
+            return
+        seg.setdefault("en_asr", seg["en"])
+        seg["en"] = en
+        if emit:
+            self.emit("en_fixed", id=seg["id"], en=en, asr=seg["en_asr"])
 
     def _translate_segs(self, segs):
         tr = self._translator()
@@ -467,11 +483,11 @@ class Engine:
             return self._translate_batch(segs)
         seg = segs[0]
         ctx = self._context_before(seg["id"], 4)
-        usage = {}
+        usage, fix = {}, {}
         try:
             if hasattr(tr, "translate_stream"):
                 zh, last = "", 0.0
-                for zh in tr.translate_stream(seg["en"], ctx, usage=usage):
+                for zh in tr.translate_stream(seg["en"], ctx, usage=usage, fix=fix):
                     if time.monotonic() - last > 0.12:
                         last = time.monotonic()
                         self.emit("translating", id=seg["id"], zh=zh)
@@ -482,7 +498,7 @@ class Engine:
             zh = self._local_translator().translate(seg["en"])
         finally:
             self._add_usage(usage)
-        self._finish(seg, self._checked(seg, zh, ctx))
+        self._finish(seg, self._checked(seg, zh, ctx), fix.get("en"))
 
     def _checked(self, seg, zh, ctx):
         """If the reply isn't a real translation (missing, or the model talked instead), retry once
@@ -510,11 +526,11 @@ class Engine:
     def _translate_batch(self, segs):
         from translate import BatchTranslator
         bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"),
-                             self.session.title if self.session else "")
+                             self.session.title if self.session else "", proofread=self._proof())
         ctx = self._context_before(segs[0]["id"], 2)
-        usage, got, last = {}, {}, 0.0
+        usage, got, last, fixes = {}, {}, 0.0, {}
         try:
-            for got in bt.translate_stream([x["en"] for x in segs], ctx, usage=usage):
+            for got in bt.translate_stream([x["en"] for x in segs], ctx, usage=usage, fixes=fixes):
                 if time.monotonic() - last > 0.12:
                     last = time.monotonic()
                     for i, zh in got.items():
@@ -524,7 +540,7 @@ class Engine:
         finally:
             self._add_usage(usage)
         for i, seg in enumerate(segs):
-            self._finish(seg, self._checked(seg, got.get(i, ""), ctx))
+            self._finish(seg, self._checked(seg, got.get(i, ""), ctx), fixes.get(i))
 
     def _autosave_loop(self):
         while True:
@@ -684,22 +700,24 @@ class Engine:
                 x["zh"] = tr.translate(x["en"])
                 progress((i + 1) / max(1, len(todo)))
             return
-        bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"), s.title)
+        bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"), s.title,
+                             proofread=self._proof())
         groups = [todo[i:i + 8] for i in range(0, len(todo), 8)]
         done = [0]
         lock = threading.Lock()
 
         def work(g):
-            usage, got = {}, {}
+            usage, got, fixes = {}, {}, {}
             ctx = [x["en"] for x in segs[max(0, g[0]["id"] - 2):g[0]["id"]]]
             try:
-                for got in bt.translate_stream([x["en"] for x in g], ctx, usage=usage):
+                for got in bt.translate_stream([x["en"] for x in g], ctx, usage=usage, fixes=fixes):
                     pass
             except CloudError:
                 got = {}
             self._charge(s, usage)
             for i, x in enumerate(g):
                 x["zh"] = got.get(i) or self._local_translator().translate(x["en"])
+                self._apply_fix(x, fixes.get(i))
             with lock:
                 done[0] += 1
                 progress(done[0] / len(groups))

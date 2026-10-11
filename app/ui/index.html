@@ -297,6 +297,7 @@ mark{background:var(--warn-soft);color:inherit;border-radius:3px;padding:0 1px}
   #source{flex-basis:150px} #title{flex-basis:110px}
   header{gap:8px}
 }
+@media (max-width:1180px){ #tourBtn span{display:none} }
 .timer:empty{display:none}
 #toast{z-index:80}
 body.touring #toast{top:auto;bottom:56px}
@@ -402,6 +403,7 @@ body.touring #toast{top:auto;bottom:56px}
           <button class="btn" id="testKey">测试</button></div>
         <div class="muted" id="keyMsg"></div>
         <div class="switch"><span>用 Claude 翻译</span><input type="checkbox" id="cloudTr"></div>
+        <div class="switch"><span>翻译时顺便校对英文：补上漏听的 is、the 等小词，改正明显听错的词（每小时约多 $0.05–0.15）</span><input type="checkbox" id="proofEn"></div>
         <div class="muted" style="line-height:1.7;margin:-2px 0 6px">翻译档位（底部栏可随时切换）：<br>
           <b>精准档</b>：每句话单独翻译，边说边出，约 $0.65/小时。适合难的课。<br>
           <b>省钱档</b>：攒 2–3 句一起翻译，语气词不翻，约 $0.3/小时，中文晚 2–3 秒。</div>
@@ -533,6 +535,22 @@ function addSeg(s){
     reserveZh(el);
     if(keep.length){ lastHyp=keep.map(x=>x.textContent.trim()); liveTarget=lastHyp.slice(); } else resetLive();
   }, anchor);
+}
+// Claude's proofreading of a finished sentence: only the changed words move, gently (added small
+// words fade in, misheard words change colour), anchored so the line being read doesn't jump
+function fixEn(id, en, asr){
+  const el=document.querySelector(`.seg[data-id="${id}"] .en`); if(!el) return;
+  const words=en.split(/\s+/).filter(Boolean);
+  glide(()=>{
+    const marked=!!el.querySelector(".nmark"); if(marked) unmark(el);
+    if(!el.querySelector("span.w")){
+      const ws=el.textContent.split(/\s+/).filter(Boolean); el.textContent="";
+      for(const w of ws){ const sp=document.createElement("span"); sp.className="w"; sp.textContent=w+" "; el.appendChild(sp); }
+    }
+    reconcile(el, words, true, false);
+    el.title="已由 Claude 校对（补上漏听的小词、改正听错的词）\n识别原文："+asr;
+    if(marked) applyMarks();
+  }, ()=> $("#partial").classList.contains("on")? $("#ptext") : lastSeg());
 }
 function setZh(id, zh, live){
   const el=document.querySelector(`.seg[data-id="${id}"] .zh`);
@@ -711,6 +729,7 @@ async function pollLoop(){
         case "translating": setZh(e.id, e.zh, true); break;
         case "cost": showCost(e); break;
         case "translated": setZh(e.id, e.zh); break;
+        case "en_fixed": fixEn(e.id, e.en, e.asr); break;
         case "status": setStatus(e.text); break;
         case "warning": setStatus(e.text); break;
         case "error": toast(e.text, true); setStatus(e.text); break;
@@ -912,7 +931,8 @@ async function save(d){ S = await api.save_settings(d); applyView(); fillSetting
 function fillSettings(){
   $("#apiKey").value = S.api_key||"";
   $("#cloudTr").checked=!!S.use_cloud_translate; $("#cloudSum").checked=!!S.use_cloud_summary;
-  $("#cloudTr").disabled=$("#cloudSum").disabled=!S.has_api_key;
+  $("#proofEn").checked = S.proofread_en!==false;
+  $("#cloudTr").disabled=$("#cloudSum").disabled=!S.has_api_key; $("#proofEn").disabled=!(S.has_api_key && S.use_cloud_translate);
   const asrSel = S.asr_choice==="moonshine"? "moonshine" : "parakeet";
   document.querySelectorAll(".opt").forEach(o=>{ const on=o.dataset.asr===asrSel; o.classList.toggle("sel",on); o.querySelector("input").checked=on; });
   $("#saveAudio").checked = S.save_audio!==false;
@@ -955,6 +975,7 @@ $("#apiKey").addEventListener("change", async ()=>{
 $("#apiKey").addEventListener("paste", ()=> setTimeout(()=>$("#apiKey").dispatchEvent(new Event("change")), 50));
 $("#cloudTr").onchange=e=>save({use_cloud_translate:e.target.checked});
 $("#cloudSum").onchange=e=>save({use_cloud_summary:e.target.checked});
+$("#proofEn").onchange=e=>save({proofread_en:e.target.checked});
 document.querySelectorAll("input[name=asr]").forEach(r=> r.onchange=()=>{
   if(r.value==="parakeet" && !models.parakeet?.installed && !models.parakeet?.downloading){ toast("正在下载高精度模型，下载完自动使用"); dl("parakeet"); }
   save({asr_choice: r.value==="parakeet"? "auto" : "moonshine"}); });
