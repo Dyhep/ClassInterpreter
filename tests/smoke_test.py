@@ -18,6 +18,10 @@ os.environ.setdefault("HOME", tmp)
 os.environ["USERPROFILE"] = tmp
 
 import engine  # noqa: E402
+
+# every Engine() would start downloading the 630 MB high-precision model in the background;
+# the tests create several engines, so keep them from fighting over the network and the CPU
+engine.Engine._auto_download_parakeet = lambda self: None
 from translate import LocalTranslator  # noqa: E402
 
 CJK = re.compile(r"[一-鿿]")
@@ -47,6 +51,8 @@ def check_pipeline(wav):
     for s in segs:
         print(f"  {s['t']:6.1f}s  {s['en']}\n          {s['zh']}")
     assert segs, "no speech recognized"
+    if not all(CJK.search(s["zh"] or "") for s in segs):
+        print([x for x in e.events if x["kind"] in ("warning", "error")])
     assert all(CJK.search(s["zh"] or "") for s in segs), "some sentences not translated"
     assert (e.session.folder / "转写与翻译.md").exists()
     return e
