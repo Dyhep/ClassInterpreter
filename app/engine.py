@@ -14,6 +14,7 @@ from cloud import CloudError, cost_usd, usage_usd
 from config import Settings
 from models import Download, MODELS, is_installed
 from summarize import Summarizer
+import courses
 
 
 def _safe(name: str) -> str:
@@ -98,6 +99,7 @@ class Engine:
         self._rec_name = None
         self.local_tr = None
         self._tr_lock = threading.Lock()
+        self.terms = []          # glossary of the course being recorded
         self.tr_q = queue.Queue()
         self.recording = False
         self.t_start = 0.0
@@ -231,8 +233,13 @@ class Engine:
 
     def _start(self, source_id, title):
         from asr import Recognizer
+        course = self._course_named(title)
+        if course:   # typed a course name: file it there and give the class a dated title
+            title = f"{course} · {datetime.now():%m月%d日}"
         self.session = Session.new(self.settings.sessions_dir(), title)
         session = self.session
+        session.course = course or ""
+        self._load_terms(session)
         self.summarizer.chunk_notes.clear()
         with self.usage_lock:
             self.usage = {"in": 0, "out": 0, "requests": 0}
@@ -487,7 +494,7 @@ class Engine:
         try:
             if hasattr(tr, "translate_stream"):
                 zh, last = "", 0.0
-                for zh in tr.translate_stream(seg["en"], ctx, usage=usage, fix=fix):
+                for zh in tr.translate_stream(seg["en"], ctx, usage=usage, fix=fix, terms=self._terms_for(seg["en"])):
                     if time.monotonic() - last > 0.12:
                         last = time.monotonic()
                         self.emit("translating", id=seg["id"], zh=zh)
@@ -530,7 +537,8 @@ class Engine:
         ctx = self._context_before(segs[0]["id"], 2)
         usage, got, last, fixes = {}, {}, 0.0, {}
         try:
-            for got in bt.translate_stream([x["en"] for x in segs], ctx, usage=usage, fixes=fixes):
+            for got in bt.translate_stream([x["en"] for x in segs], ctx, usage=usage, fixes=fixes,
+                                           terms=self._terms_for(" ".join(x["en"] for x in segs))):
                 if time.monotonic() - last > 0.12:
                     last = time.monotonic()
                     for i, zh in got.items():
@@ -594,6 +602,10 @@ class Engine:
                 try:
                     u = {}
                     stamped = [f"[{int(x['t']) // 60:02d}:{int(x['t']) % 60:02d}] {x['en']}" for x in session.segments]
+                    if session.course:
+                        terms = courses.load(self.settings.sessions_dir(), session.course)["terms"]
+                        if terms:
+                            stamped = ["【本课术语表，术语写法和译名以此为准】", courses.glossary_text(terms), "", "【转写】"] + stamped
                     out = self.summarizer.summarize_cloud(stamped, self.settings.get("api_key"),
                                                           self.settings.get("cloud_model"), progress, usage=u)
                     self._charge(session, u)
@@ -702,6 +714,7 @@ class Engine:
             return
         bt = BatchTranslator(self.settings.get("api_key"), self.settings.get("cloud_model"), s.title,
                              proofread=self._proof())
+        terms = courses.load(self.settings.sessions_dir(), s.course)["terms"] if s.course else []
         groups = [todo[i:i + 8] for i in range(0, len(todo), 8)]
         done = [0]
         lock = threading.Lock()
@@ -710,7 +723,8 @@ class Engine:
             usage, got, fixes = {}, {}, {}
             ctx = [x["en"] for x in segs[max(0, g[0]["id"] - 2):g[0]["id"]]]
             try:
-                for got in bt.translate_stream([x["en"] for x in g], ctx, usage=usage, fixes=fixes):
+                for got in bt.translate_stream([x["en"] for x in g], ctx, usage=usage, fixes=fixes,
+                                               terms=courses.relevant(terms, " ".join(x["en"] for x in g), 16)):
                     pass
             except CloudError:
                 got = {}
@@ -936,6 +950,20 @@ class Engine:
         s.save()
         return s.to_dict()
 
+    def demo_course(self, name=""):
+        """The tour's course page: file the example class under a course and give it a glossary."""
+        import demo
+        f = next((x["folder"] for x in self.list_sessions() if x.get("demo")), None)
+        if not f:
+            return None
+        s = Session.load(Path(f))
+        name = (name or s.course or demo.COURSE).strip()
+        if s.course != name:
+            self.set_course(f, name)
+        courses.mutate(self.settings.sessions_dir(), name,
+                       lambda d: courses.merge_terms(d["terms"], demo.TERMS, "示例课件"))
+        return name
+
     # ---------- history ----------
     def list_sessions(self):
         out = []
@@ -965,6 +993,11 @@ class Engine:
         s = self._live_or_load(folder)
         s.course = (course or "").strip()[:40]
         s.save()
+        if s is self.session:
+            self._load_terms(s)
+        if s.course:
+            root = self.settings.sessions_dir()
+            courses.save(root, courses.load(root, s.course))   # make sure the course has a home
         return s.to_dict()
 
     def _live_or_load(self, folder):
@@ -1030,6 +1063,131 @@ class Engine:
         d = json.loads(f.read_text(encoding="utf-8"))
         self._doc_cache[str(f)] = (m, d)
         return d
+
+    # ---------- courses: materials and glossary ----------
+    def _course_named(self, title):
+        t = (title or "").strip().lower()
+        if not t:
+            return None
+        for c in self.course_names():
+            if c.lower() == t:
+                return c
+        return None
+
+    def _load_terms(self, session):
+        self.terms = courses.load(self.settings.sessions_dir(), session.course)["terms"] if session.course else []
+
+    def _terms_for(self, text):
+        return courses.relevant(self.terms, text) if self.terms else None
+
+    def course_names(self):
+        root = self.settings.sessions_dir()
+        names = set(courses.names(root))
+        for h in self.list_sessions():
+            if h.get("course"):
+                names.add(h["course"])
+        return sorted(names)
+
+    def course_list(self):
+        root = self.settings.sessions_dir()
+        counts = {}
+        for h in self.list_sessions():
+            if h.get("course"):
+                counts[h["course"]] = counts.get(h["course"], 0) + 1
+        out = []
+        for n in self.course_names():
+            d = courses.load(root, n)
+            out.append({"name": n, "classes": counts.get(n, 0), "terms": len(d["terms"]),
+                        "materials": len(d["materials"])})
+        return out
+
+    def course_get(self, name):
+        return courses.load(self.settings.sessions_dir(), name)
+
+    def course_create(self, name):
+        name = (name or "").strip()[:40]
+        if not name:
+            return None
+        return courses.save(self.settings.sessions_dir(), courses.load(self.settings.sessions_dir(), name))
+
+    def course_save_terms(self, name, terms):
+        """Edits from the glossary page (whole list)."""
+        clean = []
+        for t in terms or []:
+            term = str(t.get("term", "")).strip()
+            if term:
+                clean.append({"term": term[:80], "zh": str(t.get("zh", "")).strip()[:80],
+                              "en": str(t.get("en", "")).strip()[:300], "source": t.get("source") or "手动添加",
+                              "added": t.get("added") or time.strftime("%Y-%m-%d")})
+
+        def fn(d):
+            d["terms"] = clean
+        courses.mutate(self.settings.sessions_dir(), name, fn)
+        self._refresh_terms(name)
+        return self.course_get(name)
+
+    def _refresh_terms(self, name):
+        if self.session is not None and self.session.course == name:
+            self._load_terms(self.session)
+
+    def course_import(self, name, paths):
+        """Read slides / PDFs into the course and pull out its terms (in the background)."""
+        threading.Thread(target=self._course_import, args=(name, list(paths)), daemon=True).start()
+        return True
+
+    def _course_import(self, name, paths):
+        root = self.settings.sessions_dir()
+        key = self.settings.get("api_key")
+        total_new = 0
+        for k, path in enumerate(paths):
+            title = Path(path).name
+
+            def prog(p, text):
+                self.emit("course_progress", course=name, p=(k + p) / len(paths), text=text)
+            prog(0.05, f"正在读取 {title}…")
+            try:
+                pages = courses.extract_text(path)
+            except Exception as e:
+                self.emit("course_error", course=name, text=f"{title}：读取失败（{e}）")
+                continue
+            text = "\n\n".join(f"[{n}] {t}" for n, t in pages if t)
+            if len(text) < 40:
+                self.emit("course_error", course=name, text=f"{title}：没有读到文字（可能是扫描件或纯图片）")
+                continue
+            dst = courses.copy_material(root, name, path)
+            prog(0.3, f"正在从 {title} 提取术语…")
+            new, how = [], "AI 提取"
+            if key:
+                u = {}
+                try:
+                    new = courses.ai_terms(key, self.settings.get("cloud_model"), name, text, usage=u)
+                except CloudError as e:
+                    self.emit("course_error", course=name, text=f"AI 提取术语失败：{e}，改用简单提取")
+                self._add_usage(u)
+            if not new:
+                new, how = courses.guess_terms(text), "自动提取"
+
+            def fn(d):
+                d["materials"] = [m for m in d["materials"] if m["file"] != dst.name]
+                d["materials"].append({"file": dst.name, "title": title, "pages": len(pages),
+                                       "added": time.strftime("%Y-%m-%d")})
+                return courses.merge_terms(d["terms"], new, f"{how} · {title}")
+            total_new += courses.mutate(root, name, fn)
+        self._refresh_terms(name)
+        self.emit("course_progress", course=name, p=1.0, text="")
+        self.emit("course_updated", course=name, added=total_new)
+
+    def course_delete(self, name):
+        """Remove a course page (its classes stay, just unfiled)."""
+        import shutil
+        for h in self.list_sessions():
+            if h.get("course") == name:
+                self.set_course(h["folder"], "")
+        shutil.rmtree(courses.course_dir(self.settings.sessions_dir(), name), ignore_errors=True)
+        return True
+
+    def course_open_folder(self, name):
+        return str(courses.course_dir(self.settings.sessions_dir(), name))
 
     def delete_session(self, folder):
         import shutil

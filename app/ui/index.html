@@ -301,13 +301,42 @@ mark{background:var(--warn-soft);color:inherit;border-radius:3px;padding:0 1px}
 .timer:empty{display:none}
 #toast{z-index:80}
 body.touring #toast{top:auto;bottom:56px}
+
+/* ---------- course page ---------- */
+#courseDlg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:12;padding:16px}
+#courseDlg.show{display:flex}
+#courseDlg .dialog{width:760px;height:min(86vh,720px)}
+.cmeta{color:var(--muted);font-size:12.5px;font-weight:400;margin-left:8px}
+.ctabs{display:flex;gap:4px;padding:8px 16px 0;border-bottom:1px solid var(--line)}
+.ctabs button{border:none;background:none;padding:8px 12px;font-size:14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.ctabs button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.cpane{flex:1;overflow-y:auto;padding:12px 18px 18px;display:none}
+.cpane.on{display:block}
+.ctool{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.ctool .field{flex:1;min-width:160px}
+.tterms{width:100%;border-collapse:collapse;font-size:14px}
+.tterms th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:6px 6px;border-bottom:1px solid var(--line);position:sticky;top:-12px;background:var(--panel)}
+.tterms td{padding:2px 2px;border-bottom:1px solid var(--line);vertical-align:top}
+.tterms td [contenteditable]{padding:6px 4px;border-radius:5px;outline:none;min-height:1.6em;line-height:1.5}
+.tterms td [contenteditable]:focus{background:var(--bg);box-shadow:0 0 0 1px var(--accent)}
+.tterms td.tt b{font-weight:600}
+.tterms td.src{color:var(--faint);font-size:11.5px;padding:8px 4px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.tterms td.x button{border:none;background:none;color:var(--faint);padding:6px;visibility:hidden}
+.tterms tr:hover td.x button{visibility:visible}
+.tterms td [data-ph]:empty::before{content:attr(data-ph);color:var(--faint)}
+.mlist .mi{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.mlist .mi b{flex:1;font-weight:500}
+.clist .hitem{border:1px solid var(--line);margin-bottom:6px}
+.hgh .cbtn{margin-left:auto;border:none;background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:2px 9px;font-size:12px}
+.hgh .cnt{margin-left:auto}
+.hgh .cbtn+.cnt{margin-left:6px}
 </style>
 </head>
 <body>
 <header>
   <div class="brand">课堂同传<small>EN → 中</small></div>
   <select id="source" class="field" title="声音来源"></select>
-  <input id="title" class="field" placeholder="课程名（可选）" maxlength="60">
+  <input id="title" class="field" placeholder="课程名（可选）" maxlength="60" list="courseNames"><datalist id="courseNames"></datalist>
   <button id="recBtn" class="rec-btn"><span class="dot"></span><span id="recLabel">开始</span></button>
   <span class="timer" id="timer"></span>
   <div class="meter" title="音量"><i id="level"></i></div>
@@ -386,6 +415,7 @@ body.touring #toast{top:auto;bottom:56px}
 <div class="scrim" id="scrim"></div>
 <aside id="history">
   <div class="drawer-head"><h3>历史记录</h3>
+    <button class="ibtn" id="newCourseBtn" title="新建一门课程，导入课件、建术语表"><span>+ 新建课程</span></button>
     <button class="ibtn" id="histFolder" title="打开记录文件夹"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg></button>
     <button class="ibtn" id="histClose">✕</button></div>
   <div id="hist-list"></div>
@@ -433,6 +463,24 @@ body.touring #toast{top:auto;bottom:56px}
     </div>
   </div>
 </div>
+<div id="courseDlg"><div class="dialog">
+  <div class="drawer-head"><h3><span id="cName"></span><span class="cmeta" id="cMeta"></span></h3>
+    <button class="ibtn" id="cFolder" title="打开课程文件夹"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg></button>
+    <button class="ibtn" id="cClose">✕</button></div>
+  <div class="ctabs"><button data-p="terms" class="on">术语表</button><button data-p="mats">课件与资料</button><button data-p="classes">课堂记录</button></div>
+  <div class="cpane on" id="pTerms">
+    <div class="ctool"><input class="field" id="tFind" placeholder="查找术语（英文或中文）"><button class="btn" id="tAdd">+ 添加术语</button></div>
+    <div class="muted" id="tHint" style="margin:-2px 0 10px;line-height:1.7"></div>
+    <table class="tterms"><thead><tr><th style="width:26%">术语</th><th style="width:20%">中文</th><th>在这门课里的意思</th><th>来源</th><th></th></tr></thead><tbody id="tBody"></tbody></table>
+  </div>
+  <div class="cpane" id="pMats">
+    <div class="ctool"><button class="btn primary" id="mImport">导入课件（PDF / PPT）</button><span class="muted">可以一次选多个文件</span></div>
+    <div class="progress" id="mProg" style="display:none;margin-bottom:10px"><i></i></div><div class="muted" id="mMsg" style="margin-bottom:10px"></div>
+    <div class="mlist" id="mList"></div>
+    <div class="muted" style="line-height:1.8;margin-top:6px">导入后会自动提取这门课的专业术语，加进术语表。<br>上课时，术语表会帮着把术语听对、写对、译对，课后总结也会用它统一术语。</div>
+  </div>
+  <div class="cpane" id="pClasses"><div class="clist" id="cClasses"></div></div>
+</div></div>
 <div id="selbar">
   <button class="main" data-a="explain">AI 解释</button><button data-a="ask">问 AI…</button>
   <button data-a="web">网上搜</button><button data-a="copy">复制</button>
@@ -730,6 +778,7 @@ async function pollLoop(){
         case "cost": showCost(e); break;
         case "translated": setZh(e.id, e.zh); break;
         case "en_fixed": fixEn(e.id, e.en, e.asr); break;
+        case "course_progress": case "course_error": case "course_updated": onCourseEvent(e); break;
         case "status": setStatus(e.text); break;
         case "warning": setStatus(e.text); break;
         case "error": toast(e.text, true); setStatus(e.text); break;
@@ -802,21 +851,25 @@ function hitemHtml(h){
     <button class="ibtn more" title="重命名 / 归档 / 删除">⋯</button></div>`;
 }
 async function refreshHistory(){
-  histList = await api.sessions();
-  if(!histList.length){ $("#hist-list").innerHTML=`<p class="muted" style="padding:12px">还没有记录</p>`; return; }
-  // classes not filed yet first, then one group per course (most recent course first)
+  histList = await api.sessions(); await refreshCourses();
+  // classes not filed yet first, then one group per course (most recent course first; empty courses last)
   const groups=new Map([["",[]]]);
   for(const h of histList){ const c=h.course||""; if(!groups.has(c)) groups.set(c,[]); groups.get(c).push(h); }
+  for(const c of courseList) if(!groups.has(c.name)) groups.set(c.name, []);
+  if(groups.size===1 && !histList.length){ $("#hist-list").innerHTML=`<p class="muted" style="padding:12px">还没有记录</p>`; return; }
   let html="";
   for(const [c, items] of groups){
-    if(!items.length) continue;
+    if(!c && !items.length) continue;
     const name = c || "未归档";
-    html += `<div class="hgroup${folded.has(c)?" fold":""}" data-c="${esc(c)}"><div class="hgh">${CHEV}<b>${esc(name)}</b><span>${items.length}</span></div>
+    html += `<div class="hgroup${folded.has(c)?" fold":""}" data-c="${esc(c)}"><div class="hgh">${CHEV}<b>${esc(name)}</b>
+      ${c?`<button class="cbtn" title="课件、术语表">课程主页</button>`:""}<span class="cnt">${items.length}</span></div>
       <div class="hitems">${items.map(hitemHtml).join("")}</div></div>`;
   }
   $("#hist-list").innerHTML = html;
 }
 $("#hist-list").addEventListener("click", e=>{
+  const cb=e.target.closest(".cbtn");
+  if(cb){ openCourse(cb.closest(".hgroup").dataset.c); return; }
   const g=e.target.closest(".hgh");
   if(g){ const box=g.parentElement, c=box.dataset.c; box.classList.toggle("fold"); box.classList.contains("fold")? folded.add(c) : folded.delete(c); return; }
   const more=e.target.closest(".more");
@@ -848,7 +901,7 @@ function openHMenu(folder, btn){
 }
 function openCourseMenu(folder, btn){
   const h=histList.find(x=>x.folder===folder);
-  const courses=[...new Set(histList.map(x=>x.course).filter(Boolean))];
+  const courses=[...new Set([...histList.map(x=>x.course).filter(Boolean), ...courseList.map(c=>c.name)])];
   const m=$("#hmenu");
   m.innerHTML=`<div class="lbl">归档到课程</div>${courses.map(c=>`<button data-c="${esc(c)}" class="${c===h.course?"sel":""}">🗂 ${esc(c)}</button>`).join("")}
     ${courses.length?"<hr>":""}<div class="lbl">新课程</div><input id="newCourse" placeholder="例如：微观经济学" maxlength="40">`;
@@ -887,7 +940,7 @@ async function openHistory(folder){
   setStatus("正在查看：" + s.title); $("#title").value=""; if(s.summary) openSide();
   return true;
 }
-function closeDrawers(){ $("#history").classList.remove("show"); $("#modal").classList.remove("show"); $("#scrim").classList.remove("show"); closePops(); }
+function closeDrawers(){ $("#history").classList.remove("show"); $("#modal").classList.remove("show"); $("#courseDlg").classList.remove("show"); curCourse=null; $("#scrim").classList.remove("show"); closePops(); }
 $("#histBtn").onclick=async ()=>{ await refreshHistory(); $("#history").classList.add("show"); $("#scrim").classList.add("show"); };
 $("#histClose").onclick=closeDrawers; $("#scrim").onclick=closeDrawers;
 $("#histFolder").onclick=()=>api.open_folder("");
@@ -1305,6 +1358,89 @@ $("#selbar").addEventListener("click", async e=>{
   if(a==="copy"){ try{ await navigator.clipboard.writeText(info.text); }catch{ const t=document.createElement("textarea"); t.value=info.text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } toast("已复制"); }
 });
 
+/* ---------- course page: materials + glossary ---------- */
+let curCourse=null, courseData=null, courseList=[];
+async function refreshCourses(){
+  courseList = await api.course_list();
+  $("#courseNames").innerHTML = courseList.map(c=>`<option value="${esc(c.name)}">`).join("");
+}
+async function openCourse(name, tab){
+  closePops(); curCourse=name; courseData=await api.course_get(name);
+  $("#cName").textContent=name; $("#courseDlg").classList.add("show"); $("#scrim").classList.add("show");
+  $("#history").classList.remove("show");
+  showCTab(tab||"terms"); renderCourse();
+}
+function closeCourse(){ $("#courseDlg").classList.remove("show"); curCourse=null; if(!$("#history").classList.contains("show") && !$("#modal").classList.contains("show")) $("#scrim").classList.remove("show"); }
+$("#cClose").onclick=closeCourse;
+$("#cFolder").onclick=()=>api.course_open_folder(curCourse);
+document.querySelectorAll(".ctabs button").forEach(b=>b.onclick=()=>showCTab(b.dataset.p));
+function showCTab(p){
+  document.querySelectorAll(".ctabs button").forEach(b=>b.classList.toggle("on", b.dataset.p===p));
+  $("#pTerms").classList.toggle("on", p==="terms"); $("#pMats").classList.toggle("on", p==="mats"); $("#pClasses").classList.toggle("on", p==="classes");
+}
+function renderCourse(){
+  const d=courseData; if(!d) return;
+  const classes=histList.filter(h=>h.course===curCourse);
+  $("#cMeta").textContent=`${classes.length} 节课 · ${d.terms.length} 个术语 · ${d.materials.length} 份课件`;
+  renderTerms();
+  $("#mList").innerHTML = d.materials.length? d.materials.map(m=>`<div class="mi"><span>📄</span><b>${esc(m.title)}</b><span class="muted">${m.pages} 页 · ${esc(m.added)}</span></div>`).join("")
+    : `<div class="pal-empty">还没有课件。导入这门课的 PPT 或 PDF（讲义、教学大纲、阅读材料都可以）。</div>`;
+  $("#cClasses").innerHTML = classes.length? classes.map(hitemHtml).join("") : `<div class="pal-empty">还没有这门课的课堂记录。<br>上课前在顶部「课程名」里选「${esc(curCourse)}」，这节课就会自动归到这里。</div>`;
+  $("#cClasses").querySelectorAll(".more").forEach(b=>b.remove());
+}
+function renderTerms(){
+  const q=$("#tFind").value.trim().toLowerCase(), d=courseData;
+  const rows=d.terms.map((t,i)=>({t,i})).filter(({t})=>!q || (t.term+" "+(t.zh||"")+" "+(t.en||"")).toLowerCase().includes(q))
+    .sort((a,b)=>a.t.term.localeCompare(b.t.term));
+  $("#tHint").innerHTML = d.terms.length? `点任意格子就能修改。术语表会用来<b>校对识别、统一翻译、生成总结</b>。` +
+      (d.terms.some(t=>/自动提取/.test(t.source||""))? ` 标着「自动提取」的是没有 AI 时粗略找出的词，请删掉不对的。`:"")
+    : `还没有术语。去「课件与资料」导入课件自动提取，或者点「+ 添加术语」。`;
+  $("#tBody").innerHTML=rows.map(({t,i})=>`<tr data-i="${i}">
+    <td class="tt"><b contenteditable="true" data-k="term" data-ph="term">${esc(t.term)}</b></td>
+    <td><div contenteditable="true" data-k="zh" data-ph="中文">${esc(t.zh||"")}</div></td>
+    <td><div contenteditable="true" data-k="en" data-ph="一句话解释">${esc(t.en||"")}</div></td>
+    <td class="src" title="${esc(t.source||"")}">${esc((t.source||"").replace(/ · .*/,""))}</td>
+    <td class="x"><button title="删除">✕</button></td></tr>`).join("");
+}
+$("#tFind").addEventListener("input", renderTerms);
+let termSave=null;
+function saveTermsSoon(){ clearTimeout(termSave); termSave=setTimeout(async ()=>{ courseData=await api.course_save_terms(curCourse, courseData.terms); refreshCourses(); }, 400); }
+$("#tBody").addEventListener("blur", e=>{
+  const c=e.target.closest("[data-k]"); if(!c) return;
+  const i=+c.closest("tr").dataset.i, t=courseData.terms[i], v=c.textContent.trim();
+  if(c.dataset.k==="term" && !v){ c.textContent=t.term; return; }
+  if(t[c.dataset.k]!==v){ t[c.dataset.k]=v; saveTermsSoon(); }
+}, true);
+$("#tBody").addEventListener("keydown", e=>{ if(e.key==="Enter" && e.target.closest("[data-k]")){ e.preventDefault(); e.target.blur(); } });
+$("#tBody").addEventListener("click", e=>{
+  if(!e.target.closest(".x button")) return;
+  const i=+e.target.closest("tr").dataset.i, gone=courseData.terms.splice(i,1)[0];
+  renderTerms(); saveTermsSoon();
+  toastUndo(`已删除「${gone.term}」`, ()=>{ courseData.terms.splice(i,0,gone); renderTerms(); saveTermsSoon(); });
+});
+$("#tAdd").onclick=()=>{
+  $("#tFind").value=""; courseData.terms.push({term:"新术语", zh:"", en:"", source:"手动添加"});
+  renderTerms();
+  const i=courseData.terms.length-1, cell=document.querySelector(`#tBody tr[data-i="${i}"] [data-k="term"]`);
+  cell.scrollIntoView({block:"center"}); cell.focus(); getSelection().selectAllChildren(cell); saveTermsSoon();
+};
+$("#mImport").onclick=async ()=>{ const r=await api.course_import(curCourse); if(r && r.ok){ $("#mProg").style.display="block"; $("#mMsg").textContent="准备中…"; } };
+$("#cClasses").addEventListener("click", e=>{ const it=e.target.closest(".hitem"); if(it){ closeCourse(); openHistory(it.dataset.f); } });
+$("#newCourseBtn").onclick=()=>{
+  const m=$("#hmenu");
+  m.innerHTML=`<div class="lbl">新建课程</div><input id="ncName" placeholder="例如：ECON 110 微观经济学" maxlength="40">`;
+  placePop(m, $("#newCourseBtn")); const inp=$("#ncName"); inp.focus();
+  inp.onkeydown=async e=>{ if(e.key==="Enter" && inp.value.trim()){ const n=inp.value.trim(); closePops(); await api.course_create(n); await refreshCourses(); await refreshHistory(); openCourse(n, "mats"); }
+    if(e.key==="Escape") closePops(); };
+};
+function onCourseEvent(e){
+  if(e.kind==="course_error"){ toast(e.text, true); return; }
+  if(e.course!==curCourse) { if(e.kind==="course_updated") refreshCourses(); return; }
+  if(e.kind==="course_progress"){ const busy=e.p<1; $("#mProg").style.display=busy?"block":"none"; $("#mProg").firstElementChild.style.width=(e.p*100)+"%"; $("#mMsg").textContent=busy? e.text:""; }
+  if(e.kind==="course_updated"){ api.course_get(curCourse).then(d=>{ courseData=d; renderCourse(); }); refreshCourses();
+    toast(e.added? `术语表新增 ${e.added} 个术语` : "课件已导入（没有发现新术语）"); }
+}
+
 /* ---------- search everything (Ctrl+K) ---------- */
 let palItems=[], palSel=0, palSeq=0;
 function openPalette(q){
@@ -1471,8 +1607,19 @@ const CHAPTERS = {
     {target:"#palResults", title:"回车或点击打开", text:"会直接跳到那节课的那句话；如果是笔记，会打开那条笔记。",
      tryText:"点一条结果", done:()=>lastOpened>TOUR.t0, doIt:()=>{ if(palItems[0]) openResult(palItems[0]); }},
   ]},
+  course: {name:"课程主页", steps:[
+    {before:async()=>{ await ensureDemo(); closePalette(); TOUR.course=await api.demo_course(demoHist()?.course||""); await refreshHistory();
+        $("#history").classList.add("show"); $("#scrim").classList.add("show"); },
+     target:()=>document.querySelector(`.hgroup[data-c="${CSS.escape(TOUR.course||"")}"] .cbtn`), place:"right", title:"每门课都有一个「课程主页」",
+     text:"在历史里，每门课程名旁边都有「课程主页」。课件、术语表、这门课的所有课堂记录都在这里。",
+     tryText:"点「课程主页」", done:()=>$("#courseDlg").classList.contains("show"), doIt:()=>openCourse(TOUR.course)},
+    {before:async()=>{ showCTab("mats"); }, target:"#mImport", title:"导入课件", text:"把这门课的 PPT、PDF（讲义、教学大纲、阅读材料）导进来，会自动提取这门课的<b>专业术语</b>。"},
+    {before:async()=>{ showCTab("terms"); }, target:"#pTerms", place:"left", title:"这门课的术语表",
+     text:"每个术语都有标准中文和它在这门课里的意思，点任意格子就能改。<br>上课时它会帮着把术语<b>听对、写对、译对</b>，课后总结也用它统一说法。"},
+    {before:async()=>{ closeCourse(); closeDrawers(); }, target:"#title", title:"上课前选好课程", text:"在这里填（或选）课程名，这节课就会自动归到这门课，并用上它的术语表。"},
+  ]},
 };
-const FULL=["start","summary","notes","history","search"];
+const FULL=["start","summary","notes","history","course","search"];
 
 function startTour(which){
   closePops();
@@ -1506,7 +1653,7 @@ async function showStep(i){
     if(a==="exit") endTour(false);
     if(a==="next") showStep(TOUR.i+1);
     if(a==="do"){ e.target.disabled=true; try{ await st.doIt(); }catch(err){ console.error(err); } }
-    if(a==="deldemo"){ await api.delete_session(TOUR.demo.folder); if(summaryFolder===TOUR.demo.folder){ $("#segs").innerHTML=""; summaryText=""; summaryFolder=""; curMeta=null; renderSummary(); $("#empty").style.display=""; loadNotes(); closeSide(); setStatus("准备就绪"); } endTour(true); }
+    if(a==="deldemo"){ if(TOUR.course==="示例课程") await api.course_delete("示例课程"); await api.delete_session(TOUR.demo.folder); refreshCourses(); if(summaryFolder===TOUR.demo.folder){ $("#segs").innerHTML=""; summaryText=""; summaryFolder=""; curMeta=null; renderSummary(); $("#empty").style.display=""; loadNotes(); closeSide(); setStatus("准备就绪"); } endTour(true); }
   };
   tourFrame(); card.style.opacity="1";
 }
@@ -1573,7 +1720,7 @@ async function boot(){
   $("#source").innerHTML = r.sources.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
   if(S.source && r.sources.some(s=>s.id===S.source)) $("#source").value=S.source;
   $("#about").textContent = `课堂同传 v${r.version} · 语音识别与翻译在本机离线运行`;
-  applyView(); renderSummary(); pollLoop();
+  applyView(); renderSummary(); pollLoop(); refreshCourses();
   if(!S.tour_done) setTimeout(welcome, 400);
 }
 window.addEventListener("pywebviewready", boot);

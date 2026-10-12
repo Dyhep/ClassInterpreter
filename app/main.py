@@ -68,6 +68,37 @@ class Api:
         title = title or Path(path).stem
         return self.start(f"file:{path}?speed=30", title)
 
+    # ---- courses ----
+    def course_list(self):
+        return self._e.course_list()
+
+    def course_get(self, name):
+        return self._e.course_get(name)
+
+    def course_create(self, name):
+        return self._e.course_create(name)
+
+    def course_save_terms(self, name, terms):
+        return self._e.course_save_terms(name, terms)
+
+    def course_import(self, name):
+        types = ("课件和资料 (*.pdf;*.pptx;*.txt;*.md)",)
+        mode = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+        res = self._window.create_file_dialog(mode, allow_multiple=True, file_types=types)
+        if not res:
+            return {"ok": False, "cancel": True}
+        paths = list(res) if isinstance(res, (list, tuple)) else [res]
+        self._e.course_import(name, paths)
+        return {"ok": True, "count": len(paths)}
+
+    def course_delete(self, name):
+        return self._e.course_delete(name)
+
+    def course_open_folder(self, name):
+        p = Path(self._e.course_open_folder(name))
+        p.mkdir(parents=True, exist_ok=True)
+        return self.open_folder(str(p))
+
     def rerecognize(self, folder):
         return self._e.rerecognize(folder)
 
@@ -123,6 +154,9 @@ class Api:
 
     def demo_session(self):
         return self._e.demo_session()
+
+    def demo_course(self, name=""):
+        return self._e.demo_course(name)
 
     def delete_session(self, folder):
         return self._e.delete_session(folder)

@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 ROOT = SPECPATH + "/.."
 datas, binaries, hidden = [], [], []
-for pkg in ("sherpa_onnx", "ctranslate2", "webview", "pythonnet", "clr_loader"):
+for pkg in ("sherpa_onnx", "ctranslate2", "webview", "pythonnet", "clr_loader", "pptx", "pypdf"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hidden += h
 datas += collect_data_files("soundcard")   # cffi header files read at runtime

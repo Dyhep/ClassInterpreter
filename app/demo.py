@@ -70,6 +70,16 @@ SUMMARY = """## 本节课主题
 先记住公式，再用汽油和麦片两个例子各自说明一遍。
 """
 
+TERMS = [
+    {"term": "price elasticity of demand", "zh": "需求价格弹性", "en": "How much the quantity demanded changes when the price changes."},
+    {"term": "elastic", "zh": "有弹性的", "en": "Quantity demanded changes a lot when the price changes (elasticity > 1)."},
+    {"term": "inelastic", "zh": "缺乏弹性的", "en": "Quantity demanded changes little when the price changes (elasticity < 1)."},
+    {"term": "total revenue", "zh": "总收入", "en": "Price times quantity sold."},
+    {"term": "substitutes", "zh": "替代品", "en": "Goods that can be used in place of each other."},
+    {"term": "law of demand", "zh": "需求定律", "en": "When price rises, quantity demanded falls, other things equal."},
+    {"term": "quantity demanded", "zh": "需求量", "en": "The amount buyers want to buy at a given price."},
+]
+
 # prepared explanations, picked by what the user selected
 ANSWERS = [
     (r"elastic|弹性|sensitive|敏感",

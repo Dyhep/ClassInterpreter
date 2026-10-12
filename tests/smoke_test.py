@@ -153,6 +153,37 @@ def check_cloud_tiers():
     assert len(e.notes_list(folder)) == 1
     e.note_restore(folder, gone)
     assert len(e.notes_list(folder)) == 2
+    # course: import slides (AI terms), course terms reach the translation request, summary uses glossary
+    from pptx import Presentation
+    pres = Presentation()
+    sl = pres.slides.add_slide(pres.slide_layouts[1])
+    sl.shapes.title.text = "Price elasticity of demand"
+    sl.placeholders[1].text = "Total revenue = P x Q. Deadweight loss from taxes."
+    deck = Path(tmp) / "week3.pptx"
+    pres.save(str(deck))
+    e2 = engine.Engine()
+    e2.settings.update({"api_key": "sk-ant-fake", "use_cloud_translate": True, "translate_tier": "best"})
+    e2.course_import("ECON 110", [str(deck)])
+    t0 = time.time()
+    while not any(x["kind"] == "course_updated" for x in e2.events):
+        assert time.time() - t0 < 30, "course import timed out"
+        time.sleep(0.05)
+    d = e2.course_get("ECON 110")
+    assert len(d["terms"]) == 3 and d["terms"][0]["zh"] and d["materials"], d
+    seen = []
+    import translate
+    orig = translate.CloudTranslator._message
+    translate.CloudTranslator._message = lambda self, text, ctx, terms=None: seen.append(terms) or orig(self, text, ctx, terms)
+    e2.session = engine.Session.new(e2.settings.sessions_dir(), "econ")
+    e2.session.course = "ECON 110"
+    e2._load_terms(e2.session)
+    e2.recording = True
+    e2._on_final("So the dead weight loss here is the triangle.", 1.0)
+    e2.tr_q.join()
+    translate.CloudTranslator._message = orig
+    assert seen and seen[0] and seen[0][0]["term"] == "deadweight loss", seen
+    assert e2._course_named("econ 110") == "ECON 110"
+    print(f"  course: {len(d['terms'])} terms from slides, misheard term sent with the sentence")
     print(f"  notes: explain ${r1['usd']}, follow-up ${r2['usd']}, web ${r3['usd']}, key「{th['key']}」")
     srv.shutdown()
     cloud.API_URL = "https://api.anthropic.com/v1/messages"

@@ -51,7 +51,11 @@ class H(BaseHTTPRequestHandler):
         body = user.split("【请翻译这一句】")[-1] if "【请翻译这一句】" in user else user
         body = body.replace("<原文>", "").replace("</原文>", "").strip()
         lines = [l for l in body.split("\n") if re.match(r"^\d+\.\s", l)]
-        if chat:
+        if "专业术语表" in system:
+            out = ("price elasticity of demand | 需求价格弹性 | How much quantity demanded responds to a price change\n"
+                   "total revenue | 总收入 | Price times quantity sold\n"
+                   "deadweight loss | 无谓损失 | Lost total surplus from a market distortion")
+        elif chat:
             out = f"这是第{len(msgs)//2+1}轮回答：课上在 [00:05] 讲到了这一点。" + ("（参考了网上资料）" if web else "")
         elif lines and H.META_REPLY:
             out = "我准备好接收英文语音转写内容。请提供编号的英文文本，我将逐句译成简体中文。请粘贴需要翻译的内容"
