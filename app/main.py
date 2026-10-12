@@ -180,11 +180,24 @@ class Api:
         return self._e.settings.public()
 
     def set_on_top(self, on):
+        """Keep the window above others (for watching online classes).
+        pywebview's own setter changes the WinForms window from this worker thread, which can
+        deadlock the window ("not responding"), so on Windows the change is posted to the UI thread."""
+        on = bool(on)
         try:
-            self._window.on_top = bool(on)
+            if sys.platform == "win32":
+                from System import Action
+                from webview.platforms.winforms import BrowserView
+                form = BrowserView.instances.get(self._window.uid)
+                if form is not None:
+                    def apply():
+                        form.TopMost = on
+                    form.BeginInvoke(Action(apply))   # returns at once, runs on the UI thread
+                    return on
+            self._window.on_top = on
         except Exception:
             pass
-        return bool(on)
+        return on
 
 
 def selftest():
